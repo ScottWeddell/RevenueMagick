@@ -480,36 +480,75 @@ export const fallbackRevenueStrategist = {
   compoundingActions: [
     {
       id: 'action-001',
-      title: 'Add video to FAQ section',
-      description: 'Video explanations increase trust and reduce hesitation for Proof-Driven users',
-      estimated_impact: 0.18,
-      effort_level: 'low',
-      implementation_time: '2-3 hours',
-      affected_metric: 'conversion_rate',
-      confidence: 0.76,
-      category: 'trust_building'
+      title: 'Add Exit-Intent Popup for High Readiness Users',
+      description: 'Show targeted offers to users with readiness scores >80 when they show exit intent',
+      effort_score: 2,
+      impact_score: 7,
+      leverage_ratio: 3.5,
+      implementation_time: '2 hours',
+      category: 'Conversion Optimization',
+      status: 'suggested',
+      expected_lift: 0.08
     },
     {
       id: 'action-002',
-      title: 'Optimize mobile CTA button size',
-      description: 'Increase mobile CTA button size by 20% to improve tap accuracy and conversions',
-      estimated_impact: 0.12,
-      effort_level: 'low',
-      implementation_time: '30 minutes',
-      affected_metric: 'mobile_conversion_rate',
-      confidence: 0.89,
-      category: 'mobile_optimization'
+      title: 'Personalize Email Subject Lines by Profile',
+      description: 'Use Neuromind Profile data to customize email subject lines for better open rates',
+      effort_score: 3,
+      impact_score: 6,
+      leverage_ratio: 2.0,
+      implementation_time: '4 hours',
+      category: 'Email Marketing',
+      status: 'in_progress',
+      expected_lift: 0.12
     },
     {
       id: 'action-003',
-      title: 'Add urgency timer to checkout',
-      description: 'Limited-time offers with countdown timers for Fast-Mover profiles',
-      estimated_impact: 0.25,
-      effort_level: 'medium',
-      implementation_time: '4-6 hours',
-      affected_metric: 'checkout_completion',
-      confidence: 0.71,
-      category: 'urgency_optimization'
+      title: 'Add Urgency Timers for Fast-Mover Profiles',
+      description: 'Display countdown timers on product pages when Fast-Mover profiles are detected',
+      effort_score: 4,
+      impact_score: 8,
+      leverage_ratio: 2.0,
+      implementation_time: '6 hours',
+      category: 'Personalization',
+      status: 'suggested',
+      expected_lift: 0.15
+    },
+    {
+      id: 'action-004',
+      title: 'Optimize Page Load Speed for Mobile',
+      description: 'Compress images and optimize mobile page load times to reduce bounce rate',
+      effort_score: 6,
+      impact_score: 7,
+      leverage_ratio: 1.17,
+      implementation_time: '1 day',
+      category: 'Technical Optimization',
+      status: 'completed',
+      expected_lift: 0.09
+    },
+    {
+      id: 'action-005',
+      title: 'Add Video to FAQ Section',
+      description: 'Video explanations increase trust and reduce hesitation for Proof-Driven users',
+      effort_score: 3,
+      impact_score: 5,
+      leverage_ratio: 1.67,
+      implementation_time: '3 hours',
+      category: 'Trust Building',
+      status: 'suggested',
+      expected_lift: 0.06
+    },
+    {
+      id: 'action-006',
+      title: 'Optimize Mobile CTA Button Size',
+      description: 'Increase mobile CTA button size by 20% to improve tap accuracy and conversions',
+      effort_score: 1,
+      impact_score: 4,
+      leverage_ratio: 4.0,
+      implementation_time: '30 minutes',
+      category: 'Mobile Optimization',
+      status: 'suggested',
+      expected_lift: 0.04
     }
   ],
   simulations: [
@@ -538,6 +577,47 @@ export const fallbackRevenueStrategist = {
         high: 0.95
       },
       timeframe: '6-8 weeks'
+    }
+  ],
+  marketInsights: [
+    {
+      type: 'opportunity',
+      title: 'Competitor Price Increase Creates Opening',
+      description: 'Main competitor increased prices by 20% last week. Opportunity to capture price-sensitive customers while maintaining premium positioning.',
+      impact: 'high',
+      urgency: 'immediate',
+      recommended_actions: [
+        'Launch targeted campaign highlighting value proposition',
+        'Create comparison landing page',
+        'Implement competitive pricing strategy'
+      ],
+      data_source: 'Competitive Intelligence'
+    },
+    {
+      type: 'trend',
+      title: 'Mobile Commerce Growth Accelerating',
+      description: 'Mobile traffic increased 35% month-over-month with higher engagement rates. Mobile users showing stronger buying intent.',
+      impact: 'high',
+      urgency: 'short_term',
+      recommended_actions: [
+        'Prioritize mobile optimization initiatives',
+        'Develop mobile-first marketing campaigns',
+        'Enhance mobile checkout experience'
+      ],
+      data_source: 'Analytics Platform'
+    },
+    {
+      type: 'threat',
+      title: 'Ad Costs Rising Across Platforms',
+      description: 'Facebook and Google ad costs increased 18% this quarter. Need to improve conversion efficiency to maintain profitability.',
+      impact: 'medium',
+      urgency: 'short_term',
+      recommended_actions: [
+        'Optimize ad targeting and creative performance',
+        'Increase focus on organic traffic channels',
+        'Improve landing page conversion rates'
+      ],
+      data_source: 'Ad Platform APIs'
     }
   ]
 };

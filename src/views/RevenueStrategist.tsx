@@ -90,8 +90,7 @@ const RevenueStrategist: React.FC = () => {
           setRecommendations(strategistData.recommendations);
           setCompoundingActions(strategistData.compoundingActions);
           setSimulations(strategistData.simulations);
-          setMarketInsights([]);
-          setError('Demo Mode - Using sample data');
+          setMarketInsights(strategistData.marketInsights || []);
         }
         setIsLoading(false);
         return;
@@ -325,7 +324,7 @@ const RevenueStrategist: React.FC = () => {
           setRecommendations(strategistData.recommendations);
           setCompoundingActions(strategistData.compoundingActions);
           setSimulations(strategistData.simulations);
-          setMarketInsights([]);
+          setMarketInsights(strategistData.marketInsights || []);
         }
         
         setIsLoading(false);
