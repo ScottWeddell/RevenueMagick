@@ -8,6 +8,7 @@ import CustomerIntelligence from './views/CustomerIntelligence';
 import RevenueStrategist from './views/RevenueStrategist';
 import DevMonitoring from './views/DevMonitoring';
 import Integrations from './views/Integrations';
+
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import { UserProvider } from './contexts/UserContext';

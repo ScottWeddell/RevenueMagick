@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revenue Magick - Development Milestones</title>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background: #f9fafb;
+            color: #374151;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #2673EC 0%, #1F2B59 100%);
+            color: white;
+            padding: 2rem 0;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        .header-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .neural-glyph {
+            width: 50px;
+            height: 50px;
+            background: radial-gradient(circle, #D8E8FF 0%, #2673EC 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            animation: pulse 2s infinite;
+            margin-right: 1rem;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        
+        .header-text h1 {
+            margin: 0;
+            font-size: 2rem;
+            font-weight: 700;
+        }
+        
+        .header-text p {
+            margin: 0.5rem 0 0 0;
+            font-size: 1.1rem;
+            opacity: 0.9;
+        }
+        
+        .last-updated {
+            font-size: 0.875rem;
+            opacity: 0.8;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem 1rem;
+        }
+        
+        .content-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            border: 1px solid #e5e7eb;
+            overflow: hidden;
+        }
+        
+        .content-body {
+            padding: 2rem;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 4rem 2rem;
+        }
+        
+        .spinner {
+            width: 3rem;
+            height: 3rem;
+            border: 3px solid #e5e7eb;
+            border-top: 3px solid #2673EC;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 1rem;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .error {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: #dc2626;
+        }
+        
+        .error-icon {
+            font-size: 2rem;
+            margin-bottom: 1rem;
+        }
+        
+        /* Markdown Styles */
+        .markdown-content {
+            max-width: none;
+        }
+        
+        .markdown-content h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin: 2rem 0;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid #e5e7eb;
+            color: #111827;
+        }
+        
+        .markdown-content h2 {
+            font-size: 2rem;
+            font-weight: 600;
+            margin: 3rem 0 1.5rem 0;
+            color: #1e3a8a;
+        }
+        
+        .markdown-content h3 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 2rem 0 1rem 0;
+            color: #1e40af;
+        }
+        
+        .markdown-content h4 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 1.5rem 0 0.75rem 0;
+            color: #1d4ed8;
+        }
+        
+        .markdown-content p {
+            margin: 1rem 0;
+            color: #374151;
+            line-height: 1.7;
+        }
+        
+        .markdown-content ul {
+            margin: 1rem 0;
+            padding-left: 0;
+        }
+        
+        .markdown-content li {
+            display: flex;
+            align-items: center;
+            margin: 0.5rem 0;
+            padding: 0.5rem 0;
+        }
+        
+        .markdown-content strong {
+            font-weight: 600;
+            color: #111827;
+        }
+        
+        .markdown-content code {
+            background: #f3f4f6;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-family: 'Monaco', 'Menlo', monospace;
+        }
+        
+        .markdown-content pre {
+            background: #1f2937;
+            color: #f9fafb;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+        }
+        
+        .markdown-content blockquote {
+            border-left: 4px solid #3b82f6;
+            padding-left: 1rem;
+            font-style: italic;
+            color: #6b7280;
+            margin: 1rem 0;
+        }
+        
+        .markdown-content table {
+            width: 100%;
+            border-collapse: collapse;
+            border: 1px solid #d1d5db;
+            margin: 1rem 0;
+        }
+        
+        .markdown-content th,
+        .markdown-content td {
+            border: 1px solid #d1d5db;
+            padding: 0.75rem 1rem;
+            text-align: left;
+        }
+        
+        .markdown-content th {
+            background: #f9fafb;
+            font-weight: 600;
+        }
+        
+        .markdown-content a {
+            color: #2563eb;
+            text-decoration: none;
+        }
+        
+        .markdown-content a:hover {
+            text-decoration: underline;
+        }
+        
+        /* Status Badges */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-left: 0.5rem;
+        }
+        
+        .status-complete {
+            background: #dcfce7;
+            color: #166534;
+        }
+        
+        .status-progress {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+        
+        .status-mvp {
+            background: #f3e8ff;
+            color: #7c3aed;
+        }
+        
+        .status-not-needed {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+        
+        .checkbox {
+            margin-right: 0.5rem;
+            font-size: 1rem;
+        }
+        
+        .checkbox-complete {
+            color: #16a34a;
+        }
+        
+        .checkbox-progress {
+            color: #2563eb;
+        }
+        
+        .checkbox-pending {
+            color: #9ca3af;
+        }
+        
+        .line-through {
+            text-decoration: line-through;
+            color: #9ca3af;
+        }
+        
+        @media (max-width: 768px) {
+            .header-content {
+                flex-direction: column;
+                text-align: center;
+            }
+            
+            .neural-glyph {
+                margin: 0 0 1rem 0;
+            }
+            
+            .container {
+                padding: 1rem;
+            }
+            
+            .content-body {
+                padding: 1rem;
+            }
+            
+            .markdown-content h1 {
+                font-size: 2rem;
+            }
+            
+            .markdown-content h2 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div style="display: flex; align-items: center;">
+                <div class="neural-glyph">⚡</div>
+                <div class="header-text">
+                    <h1>Revenue Magick</h1>
+                    <p>Development Milestones</p>
+                </div>
+            </div>
+            <div class="last-updated">
+                Last updated: <span id="lastUpdated"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="content-card">
+            <div class="content-body">
+                <div id="loading" class="loading">
+                    <div class="spinner"></div>
+                    <p>Loading milestones...</p>
+                </div>
+                
+                <div id="error" class="error" style="display: none;">
+                    <div class="error-icon">⚠️</div>
+                    <p id="errorMessage">Failed to load milestones</p>
+                </div>
+                
+                <div id="content" class="markdown-content" style="display: none;"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        // Set last updated date
+        document.getElementById('lastUpdated').textContent = new Date().toLocaleDateString();
+        
+        // Fetch and render markdown
+        async function loadMilestones() {
+            try {
+                const response = await fetch('/MILESTONES_PLAN.md');
+                if (!response.ok) {
+                    throw new Error(`Failed to fetch milestones: ${response.statusText}`);
+                }
+                
+                const markdown = await response.text();
+                const html = marked.parse(markdown);
+                
+                // Hide loading, show content
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('content').style.display = 'block';
+                document.getElementById('content').innerHTML = html;
+                
+                // Process checkboxes and add status badges
+                processCheckboxes();
+                
+            } catch (error) {
+                console.error('Error loading milestones:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('errorMessage').textContent = error.message;
+            }
+        }
+        
+        function processCheckboxes() {
+            const listItems = document.querySelectorAll('#content li');
+            
+            listItems.forEach(li => {
+                const text = li.textContent;
+                
+                // Clear existing content and rebuild
+                li.innerHTML = '';
+                li.style.display = 'flex';
+                li.style.alignItems = 'center';
+                li.style.margin = '0.5rem 0';
+                li.style.padding = '0.5rem 0';
+                
+                if (text.includes('✅ COMPLETE')) {
+                    li.innerHTML = `
+                        <span class="checkbox checkbox-complete">✅</span>
+                        <span>${text.replace('✅ COMPLETE', '').replace(/^\[x\]\s*/, '').trim()}</span>
+                        <span class="status-badge status-complete">COMPLETE</span>
+                    `;
+                } else if (text.includes('🔄 IN PROGRESS')) {
+                    li.innerHTML = `
+                        <span class="checkbox checkbox-progress">🔄</span>
+                        <span>${text.replace('🔄 IN PROGRESS', '').replace(/^\[x\]\s*/, '').trim()}</span>
+                        <span class="status-badge status-progress">IN PROGRESS</span>
+                    `;
+                } else if (text.includes('NOT NEEDED')) {
+                    li.innerHTML = `
+                        <span class="checkbox checkbox-pending">⏸️</span>
+                        <span class="line-through">${text.replace('**NOT NEEDED**', '').replace(/^\[\s\]\s*/, '').trim()}</span>
+                        <span class="status-badge status-not-needed">NOT NEEDED</span>
+                    `;
+                } else if (text.includes('**MVP**')) {
+                    li.innerHTML = `
+                        <span class="checkbox checkbox-pending">☐</span>
+                        <span>${text.replace(/^\[\s\]\s*/, '').trim()}</span>
+                        <span class="status-badge status-mvp">MVP</span>
+                    `;
+                } else if (text.match(/^\[\s\]/)) {
+                    li.innerHTML = `
+                        <span class="checkbox checkbox-pending">☐</span>
+                        <span>${text.replace(/^\[\s\]\s*/, '').trim()}</span>
+                    `;
+                } else if (text.match(/^\[x\]/)) {
+                    li.innerHTML = `
+                        <span class="checkbox checkbox-complete">☑️</span>
+                        <span>${text.replace(/^\[x\]\s*/, '').trim()}</span>
+                    `;
+                }
+            });
+        }
+        
+        // Load milestones when page loads
+        document.addEventListener('DOMContentLoaded', loadMilestones);
+    </script>
+</body>
+</html> 
