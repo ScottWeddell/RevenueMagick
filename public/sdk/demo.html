@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Revenue Magick Tracking SDK Demo</title>
+    <style>
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #2673EC 0%, #1F2B59 100%);
+            color: white;
+            min-height: 200vh; /* Make page scrollable */
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 40px;
+            border-radius: 20px;
+            backdrop-filter: blur(10px);
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .neural-glyph {
+            width: 60px;
+            height: 60px;
+            margin: 0 auto 20px;
+            background: radial-gradient(circle, #D8E8FF 0%, #2673EC 100%);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.05); opacity: 0.8; }
+        }
+        
+        .cta-button {
+            background: linear-gradient(45deg, #2673EC, #1F2B59);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            margin: 10px;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(38, 115, 236, 0.3);
+        }
+        
+        .cta-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(38, 115, 236, 0.4);
+        }
+        
+        .form-section {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 30px;
+            border-radius: 15px;
+            margin: 30px 0;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+        
+        input, textarea, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+        }
+        
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: #D8E8FF;
+        }
+        
+        input::placeholder, textarea::placeholder {
+            color: rgba(255, 255, 255, 0.6);
+        }
+        
+        .content-section {
+            margin: 40px 0;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 15px;
+        }
+        
+        .tracking-info {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 12px;
+            max-width: 250px;
+            z-index: 1000;
+        }
+        
+        .metric {
+            margin: 5px 0;
+        }
+        
+        .link {
+            color: #D8E8FF;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+        
+        .link:hover {
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="tracking-info" id="trackingInfo">
+        <div><strong>Revenue Magick Tracker</strong></div>
+        <div class="metric">Session: <span id="sessionId">Loading...</span></div>
+        <div class="metric">Scroll Depth: <span id="scrollDepth">0%</span></div>
+        <div class="metric">Time on Page: <span id="timeOnPage">0s</span></div>
+        <div class="metric">Events Tracked: <span id="eventCount">0</span></div>
+    </div>
+
+    <div class="container">
+        <div class="header">
+            <div class="neural-glyph">⚡</div>
+            <h1>Revenue Magick Tracking SDK Demo</h1>
+            <p>This page demonstrates Digital Body Language™ tracking capabilities</p>
+        </div>
+
+        <div class="content-section">
+            <h2>Interactive Elements</h2>
+            <p>Hover over these buttons to test CTA tracking:</p>
+            <button class="cta-button" id="primary-cta">Primary CTA</button>
+            <button class="cta-button" id="secondary-cta">Secondary CTA</button>
+            <button class="cta-button" id="tertiary-cta">Learn More</button>
+            
+            <p>Click these links to test navigation behavior:</p>
+            <a href="#section1" class="link">Go to Section 1</a> | 
+            <a href="#section2" class="link">Go to Section 2</a> | 
+            <a href="#section3" class="link">Go to Section 3</a>
+        </div>
+
+        <div class="form-section">
+            <h2>Contact Form</h2>
+            <p>Fill out this form to test form interaction tracking:</p>
+            <form id="contact-form">
+                <div class="form-group">
+                    <label for="name">Full Name</label>
+                    <input type="text" id="name" name="name" placeholder="Enter your full name" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="email">Email Address</label>
+                    <input type="email" id="email" name="email" placeholder="Enter your email" required>
+                </div>
+                
+                <div class="form-group">
+                    <label for="company">Company</label>
+                    <input type="text" id="company" name="company" placeholder="Your company name">
+                </div>
+                
+                <div class="form-group">
+                    <label for="interest">Interest Level</label>
+                    <select id="interest" name="interest">
+                        <option value="">Select your interest level</option>
+                        <option value="low">Just browsing</option>
+                        <option value="medium">Somewhat interested</option>
+                        <option value="high">Very interested</option>
+                        <option value="urgent">Need solution ASAP</option>
+                    </select>
+                </div>
+                
+                <div class="form-group">
+                    <label for="message">Message</label>
+                    <textarea id="message" name="message" rows="4" placeholder="Tell us about your needs..."></textarea>
+                </div>
+                
+                <button type="submit" class="cta-button">Submit Form</button>
+            </form>
+        </div>
+
+        <div class="content-section" id="section1">
+            <h2>Section 1: Scroll Tracking</h2>
+            <p>This section helps test scroll velocity and pause detection. As you scroll through this page, the tracking SDK monitors:</p>
+            <ul>
+                <li>Scroll velocity (how fast you scroll)</li>
+                <li>Scroll pauses (when you stop to read)</li>
+                <li>Scroll depth milestones (25%, 50%, 75%, 90%)</li>
+                <li>Time spent in different sections</li>
+            </ul>
+            <p>The Revenue Magick platform uses this data to understand user engagement patterns and identify high-intent behaviors.</p>
+        </div>
+
+        <div class="content-section" id="section2">
+            <h2>Section 2: Behavioral Analysis</h2>
+            <p>Digital Body Language™ goes beyond traditional analytics by tracking micro-behaviors that reveal subconscious buying intent:</p>
+            <ul>
+                <li><strong>Hesitation Loops:</strong> Back button usage and repeated visits</li>
+                <li><strong>Click Cadence:</strong> The rhythm and decisiveness of user clicks</li>
+                <li><strong>Mouse Movements:</strong> Patterns that indicate engagement or confusion</li>
+                <li><strong>Viewport Engagement:</strong> Which elements capture attention</li>
+            </ul>
+            <p>Try using your browser's back button or clicking rapidly to see these behaviors in action.</p>
+        </div>
+
+        <div class="content-section" id="section3">
+            <h2>Section 3: Neuromind Profiles™</h2>
+            <p>Based on the behavioral data collected, users are classified into psychological profiles:</p>
+            <ul>
+                <li><strong>Fast-Mover:</strong> Quick decisions, minimal details needed</li>
+                <li><strong>Proof-Driven:</strong> Wants evidence, case studies, testimonials</li>
+                <li><strong>Reassurer:</strong> Needs support, help sections, guarantees</li>
+                <li><strong>Skeptic:</strong> High bounce rate, limited engagement</li>
+                <li><strong>Optimizer:</strong> Compares options, detailed analysis</li>
+                <li><strong>Authority-Seeker:</strong> Looks for expert opinions, credentials</li>
+                <li><strong>Experience-First:</strong> Values user experience, demos, trials</li>
+            </ul>
+            <p>Your behavior on this page is being analyzed to determine your profile!</p>
+        </div>
+
+        <div class="content-section">
+            <h2>Test Your Tracking</h2>
+            <p>Open your browser's developer console to see tracking events in real-time. You can also check the tracking info panel in the top-right corner.</p>
+            
+            <button class="cta-button" onclick="testTracking()">Trigger Test Event</button>
+            <button class="cta-button" onclick="showSession()">Show Session Info</button>
+            <button class="cta-button" onclick="flushEvents()">Flush Events</button>
+        </div>
+    </div>
+
+    <!-- Load the Revenue Magick Tracking SDK -->
+    <script src="revenue-magick-tracker.js"></script>
+    
+    <script>
+        // Initialize the tracker
+        RevenueMagick.init({
+            apiEndpoint: 'http://localhost:8000/api/v1/tracking',
+            batchSize: 5,
+            flushInterval: 3000
+        });
+
+        // Update tracking info display
+        let eventCount = 0;
+        let startTime = Date.now();
+
+        function updateTrackingInfo() {
+            const session = RevenueMagick.getSession();
+            document.getElementById('sessionId').textContent = session.sessionId.substring(0, 8) + '...';
+            document.getElementById('scrollDepth').textContent = Math.round(session.scrollDepth * 100) + '%';
+            document.getElementById('timeOnPage').textContent = Math.round(session.timeOnPage / 1000) + 's';
+            document.getElementById('eventCount').textContent = eventCount;
+        }
+
+        // Override the track function to count events
+        const originalTrack = RevenueMagick.track;
+        RevenueMagick.track = function(...args) {
+            eventCount++;
+            console.log('Revenue Magick Event:', args);
+            return originalTrack.apply(this, args);
+        };
+
+        // Test functions
+        function testTracking() {
+            RevenueMagick.track('test_event', 'demo-button', {
+                test_data: 'This is a test event',
+                timestamp: new Date().toISOString()
+            });
+            alert('Test event tracked! Check the console.');
+        }
+
+        function showSession() {
+            const session = RevenueMagick.getSession();
+            alert(JSON.stringify(session, null, 2));
+        }
+
+        function flushEvents() {
+            RevenueMagick.flush();
+            alert('Events flushed to server!');
+        }
+
+        // Update tracking info every second
+        setInterval(updateTrackingInfo, 1000);
+
+        // Form submission handler
+        document.getElementById('contact-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Form submitted! Check console for tracking data.');
+            RevenueMagick.track('demo_form_submit', 'contact-form', {
+                form_completed: true,
+                demo_page: true
+            });
+        });
+
+        // Add some interactive behaviors for testing
+        document.addEventListener('click', function(e) {
+            if (e.target.classList.contains('link')) {
+                e.preventDefault();
+                // Simulate navigation for testing hesitation loops
+                history.pushState({}, '', e.target.getAttribute('href'));
+            }
+        });
+
+        console.log('Revenue Magick Tracking SDK Demo loaded successfully!');
+        console.log('Watch this console for real-time tracking events.');
+    </script>
+</body>
+</html> 

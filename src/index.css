@@ -1,0 +1,370 @@
+/* Import fonts - must come before @tailwind directives */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Brand styles based on UI.md */
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-display tracking-tight;
+  }
+  
+  body {
+    @apply bg-gray-50 text-gray-900 antialiased;
+  }
+}
+
+body {
+  @apply bg-gray-50 text-gray-800;
+}
+
+.page-container {
+  @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6;
+}
+
+/* Revenue Magick Brand Components */
+@layer components {
+  /* Neural Glyph - The iconic signal mark */
+  .neural-glyph {
+    @apply inline-flex items-center justify-center;
+  }
+  
+  /* Signal animation for loading states */
+  .signal-pulse {
+    animation: signal-pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+  
+  @keyframes signal-pulse {
+    0%, 100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 0.7;
+      transform: scale(1.05);
+    }
+  }
+  
+  /* Page Header Responsive Layout */
+  .page-header {
+    @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-6;
+  }
+  
+  .page-header-content {
+    @apply flex-1 min-w-0;
+  }
+  
+  .page-header-title {
+    @apply text-2xl sm:text-3xl font-display font-bold text-gray-900 flex items-center gap-2 sm:gap-3;
+  }
+  
+  .page-header-description {
+    @apply text-gray-600 mt-2 text-sm sm:text-base;
+  }
+  
+  .page-header-actions {
+    @apply flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-4 w-full sm:w-auto;
+  }
+  
+  .page-header-actions > * {
+    @apply w-full sm:w-auto;
+  }
+  
+  /* Mobile-friendly button groups */
+  .button-group-mobile {
+    @apply flex flex-col sm:flex-row gap-2 sm:gap-3 w-full sm:w-auto;
+  }
+  
+  .button-group-mobile > * {
+    @apply w-full sm:w-auto;
+  }
+  
+  /* Intelligence Module Cards */
+  .intelligence-card {
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-4 sm:p-6 transition-all duration-300 hover:shadow-md hover:border-brand-ice;
+  }
+  
+  .intelligence-card-header {
+    @apply flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 mb-4;
+  }
+  
+  .intelligence-title {
+    @apply text-base sm:text-lg font-semibold text-gray-900 flex items-center gap-2;
+  }
+  
+  .intelligence-value {
+    @apply text-xl sm:text-2xl font-bold text-brand-blue;
+  }
+  
+  .intelligence-trend {
+    @apply text-sm font-medium flex items-center gap-1;
+  }
+  
+  .trend-up {
+    @apply text-green-600;
+  }
+  
+  .trend-down {
+    @apply text-red-600;
+  }
+  
+  .trend-neutral {
+    @apply text-gray-500;
+  }
+  
+  /* Structural Tension Components */
+  .tension-container {
+    @apply bg-gradient-to-br from-brand-indigo to-brand-blue rounded-xl p-4 sm:p-6 text-white min-h-0;
+  }
+  
+  .tension-header {
+    @apply text-lg sm:text-xl font-semibold mb-4;
+  }
+  
+  .tension-gap {
+    @apply text-2xl sm:text-3xl font-bold mb-2;
+  }
+  
+  .tension-description {
+    @apply text-brand-ice opacity-90 text-sm;
+  }
+  
+  /* Button System */
+.btn-primary {
+    @apply inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-lg shadow-sm text-sm font-medium text-white bg-brand-blue hover:bg-opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue transition-all duration-200;
+}
+
+.btn-secondary {
+    @apply inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-brand-blue rounded-lg shadow-sm text-sm font-medium text-brand-blue bg-white hover:bg-brand-ice focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-brand-blue transition-all duration-200;
+  }
+  
+  .btn-ghost {
+    @apply inline-flex items-center justify-center px-3 sm:px-4 py-2 border border-transparent rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 transition-all duration-200;
+}
+
+  /* Dashboard Grid System */
+  .dashboard-grid {
+    @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6;
+  }
+  
+  .dashboard-section {
+    @apply space-y-4 sm:space-y-6;
+  }
+  
+  /* Mobile-specific dashboard grid for smaller screens */
+  .dashboard-grid-mobile {
+    @apply grid grid-cols-1 gap-4;
+  }
+  
+  /* Responsive table wrapper */
+  .table-responsive {
+    @apply overflow-x-auto -mx-4 sm:mx-0;
+  }
+  
+  .table-responsive table {
+    @apply min-w-full;
+}
+
+  /* Mobile-friendly card layouts */
+  .card-stack {
+    @apply space-y-4;
+  }
+  
+  .card-stack-mobile {
+    @apply space-y-3;
+  }
+  
+  /* Behavioral Signal Visualization */
+  .signal-graph {
+    @apply relative overflow-hidden rounded-lg bg-gradient-to-br from-gray-50 to-white border border-gray-200;
+}
+
+  .signal-node {
+    @apply absolute w-3 h-3 rounded-full bg-brand-blue shadow-sm;
+    animation: signal-flow 3s ease-in-out infinite;
+  }
+  
+  @keyframes signal-flow {
+    0%, 100% {
+      opacity: 0.6;
+      transform: scale(1);
+    }
+    50% {
+      opacity: 1;
+      transform: scale(1.2);
+    }
+  }
+  
+  /* Readiness Score Indicator */
+  .readiness-score {
+    @apply relative inline-flex items-center justify-center w-12 h-12 sm:w-16 sm:h-16 rounded-full border-4 border-brand-ice bg-white;
+  }
+  
+  .readiness-score.high {
+    @apply border-green-500 text-green-600;
+  }
+  
+  .readiness-score.medium {
+    @apply border-yellow-500 text-yellow-600;
+  }
+  
+  .readiness-score.low {
+    @apply border-red-500 text-red-600;
+  }
+  
+  /* Neuromind Profile Badges */
+  .profile-badge {
+    @apply inline-flex items-center px-2 sm:px-3 py-1 rounded-full text-xs font-medium;
+  }
+  
+  .profile-fast-mover {
+    @apply bg-red-100 text-red-800;
+}
+
+  .profile-proof-driven {
+    @apply bg-blue-100 text-blue-800;
+  }
+  
+  .profile-reassurer {
+    @apply bg-green-100 text-green-800;
+  }
+  
+  .profile-skeptic {
+    @apply bg-yellow-100 text-yellow-800;
+}
+
+  .profile-optimizer {
+    @apply bg-purple-100 text-purple-800;
+  }
+  
+  .profile-authority-seeker {
+    @apply bg-indigo-100 text-indigo-800;
+  }
+  
+  .profile-experience-first {
+    @apply bg-pink-100 text-pink-800;
+  }
+  
+  /* Mobile navigation improvements */
+  .mobile-nav-item {
+    @apply block w-full text-left px-4 py-3 text-sm font-medium rounded-lg transition-colors;
+  }
+  
+  /* Touch-friendly interactive elements */
+  .touch-target {
+    @apply min-h-[44px] min-w-[44px] flex items-center justify-center;
+  }
+  
+  /* Mobile-optimized form elements */
+  .form-input-mobile {
+    @apply text-base; /* Prevents zoom on iOS */
+  }
+  
+  /* Safe area handling for mobile devices */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top);
+  }
+  
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  
+  /* Mobile-specific spacing utilities */
+  .mobile-spacing {
+    @apply px-4 sm:px-6 lg:px-8;
+  }
+  
+  .mobile-section-spacing {
+    @apply py-4 sm:py-6 lg:py-8;
+  }
+  
+  /* Select dropdown mobile styling */
+  .select-mobile {
+    @apply w-full sm:w-auto text-sm;
+  }
+  
+  /* Toggle button group for mobile */
+  .toggle-group-mobile {
+    @apply flex bg-gray-100 rounded-lg p-1 w-full sm:w-auto;
+  }
+  
+  .toggle-group-mobile button {
+    @apply flex-1 sm:flex-none px-3 sm:px-4 py-2 text-sm font-medium rounded-md transition-all;
+  }
+}
+
+/* Custom scrollbar with brand colors */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-brand-blue rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-brand-indigo;
+}
+
+/* Glass morphism effect */
+.glass {
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+/* Skeleton loading animation */
+.skeleton {
+  @apply animate-pulse bg-gray-200 rounded;
+}
+
+/* Focus ring for accessibility */
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-brand-blue focus:ring-offset-2;
+}
+
+/* Hide scrollbar but keep functionality */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile-specific media queries */
+@media (max-width: 640px) {
+  /* Ensure text remains readable on small screens */
+  .text-responsive {
+    @apply text-sm;
+  }
+  
+  /* Compact spacing for mobile */
+  .compact-mobile {
+    @apply space-y-2;
+  }
+  
+  /* Stack elements vertically on mobile */
+  .stack-mobile {
+    @apply flex-col space-y-2 space-x-0;
+  }
+}
+
+/* Prevent horizontal scroll on mobile */
+@media (max-width: 1024px) {
+  body {
+    overflow-x: hidden;
+  }
+} 
