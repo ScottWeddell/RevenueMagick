@@ -419,6 +419,12 @@
                         <span class="checkbox checkbox-complete">☑️</span>
                         <span>${text.replace(/^\[x\]\s*/, '').trim()}</span>
                     `;
+                } else {
+                    // Handle regular bullet points (no checkboxes or special formatting)
+                    li.innerHTML = `
+                        <span class="checkbox">•</span>
+                        <span>${text.trim()}</span>
+                    `;
                 }
             });
         }
