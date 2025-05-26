@@ -324,9 +324,6 @@ const AdIntelligence: React.FC = () => {
           </h1>
           <p className="page-header-description">
             Channel ROI analysis, creative fatigue detection, and message decay insights
-            {error && error.includes('Demo Mode') && (
-              <span className="ml-2 text-blue-600 font-medium">🎯 Demo Mode - Showcasing Revenue Magick capabilities</span>
-            )}
           </p>
         </div>
         <div className="page-header-actions">

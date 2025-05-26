@@ -187,20 +187,6 @@ const BehavioralSignals: React.FC = () => {
 
   return (
     <div className="space-y-8">
-      {/* Demo Mode Banner */}
-      {isDemoMode && (
-        <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
-          <div className="flex items-center gap-2">
-            <div className="w-6 h-6 bg-blue-100 rounded-full flex items-center justify-center">
-              <svg className="w-3 h-3 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <p className="text-blue-700 text-sm">🎯 Demo Mode - Showcasing Revenue Magick capabilities</p>
-          </div>
-        </div>
-      )}
-
       {/* Header */}
       <div className="page-header">
         <div className="page-header-content">

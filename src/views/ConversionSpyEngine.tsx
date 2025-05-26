@@ -241,9 +241,6 @@ const ConversionSpyEngine: React.FC = () => {
           </h1>
           <p className="page-header-description">
             Real-time Digital Body Language™ analysis and behavioral intelligence
-            {error && error.includes('Demo Mode') && (
-              <span className="ml-2 text-blue-600 font-medium">🎯 Demo Mode - Showcasing Revenue Magick capabilities</span>
-            )}
           </p>
         </div>
         <div className="page-header-actions">
