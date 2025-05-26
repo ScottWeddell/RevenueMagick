@@ -305,59 +305,134 @@ export const fallbackBehavioralSignals = {
   ]
 };
 
-export const fallbackAdCampaigns = [
-  {
-    id: 'camp-001',
-    name: 'Q4 Revenue Boost Campaign',
-    platform: 'facebook',
-    status: 'active',
-    budget: 15000,
-    spend: 12450,
-    impressions: 487000,
-    clicks: 12400,
-    conversions: 398,
-    ctr: 2.55,
-    cpc: 1.00,
-    roas: 4.2,
-    creative_fatigue_score: 0.3,
-    message_decay_rate: 0.15,
-    start_date: '2024-01-01'
-  },
-  {
-    id: 'camp-002',
-    name: 'Brand Awareness Drive',
-    platform: 'google',
-    status: 'active',
-    budget: 8000,
-    spend: 7200,
-    impressions: 234000,
-    clicks: 8900,
-    conversions: 267,
-    ctr: 3.8,
-    cpc: 0.81,
-    roas: 3.7,
-    creative_fatigue_score: 0.6,
-    message_decay_rate: 0.25,
-    start_date: '2024-01-15'
-  },
-  {
-    id: 'camp-003',
-    name: 'Retargeting Optimization',
-    platform: 'facebook',
-    status: 'paused',
-    budget: 5000,
-    spend: 4200,
-    impressions: 156000,
-    clicks: 4680,
-    conversions: 187,
-    ctr: 3.0,
-    cpc: 0.90,
-    roas: 2.8,
-    creative_fatigue_score: 0.8,
-    message_decay_rate: 0.35,
-    start_date: '2024-01-08'
-  }
-];
+export const fallbackAdCampaigns = {
+  campaigns: [
+    {
+      id: 'camp-001',
+      name: 'Q4 Revenue Boost Campaign',
+      platform: 'facebook',
+      status: 'active',
+      budget: 15000,
+      spend: 12450,
+      impressions: 487000,
+      clicks: 12400,
+      conversions: 398,
+      ctr: 2.55,
+      cpc: 1.00,
+      roas: 4.2,
+      creative_fatigue_score: 0.3,
+      message_decay_rate: 0.15,
+      start_date: '2024-01-01'
+    },
+    {
+      id: 'camp-002',
+      name: 'Brand Awareness Drive',
+      platform: 'google',
+      status: 'active',
+      budget: 8000,
+      spend: 7200,
+      impressions: 234000,
+      clicks: 8900,
+      conversions: 267,
+      ctr: 3.8,
+      cpc: 0.81,
+      roas: 3.7,
+      creative_fatigue_score: 0.6,
+      message_decay_rate: 0.25,
+      start_date: '2024-01-15'
+    },
+    {
+      id: 'camp-003',
+      name: 'LinkedIn Professional Targeting',
+      platform: 'linkedin',
+      status: 'active',
+      budget: 5000,
+      spend: 4100,
+      impressions: 89000,
+      clicks: 2340,
+      conversions: 89,
+      ctr: 2.63,
+      cpc: 1.75,
+      roas: 5.1,
+      creative_fatigue_score: 0.2,
+      message_decay_rate: 0.08,
+      start_date: '2024-02-01'
+    }
+  ],
+  creatives: [
+    {
+      id: 'creative-001',
+      campaign_id: 'camp-001',
+      creative_type: 'video',
+      headline: 'Transform Your Revenue in 30 Days',
+      description: 'Discover the AI-powered secrets to 3x your conversion rate',
+      impressions: 156000,
+      clicks: 4200,
+      conversions: 134,
+      ctr: 2.69,
+      fatigue_score: 0.25,
+      engagement_score: 0.87,
+      psychological_triggers: ['Urgency', 'Social Proof', 'Authority']
+    },
+    {
+      id: 'creative-002',
+      campaign_id: 'camp-001',
+      creative_type: 'image',
+      headline: 'Revenue Magick: See What Others Can\'t',
+      description: 'Decode subconscious buying behavior with AI',
+      impressions: 198000,
+      clicks: 5100,
+      conversions: 167,
+      ctr: 2.58,
+      fatigue_score: 0.35,
+      engagement_score: 0.82,
+      psychological_triggers: ['Curiosity', 'Exclusivity', 'Mystery']
+    },
+    {
+      id: 'creative-003',
+      campaign_id: 'camp-002',
+      creative_type: 'text',
+      headline: 'Stop Guessing. Start Knowing.',
+      description: 'AI-driven insights that predict customer behavior',
+      impressions: 134000,
+      clicks: 4800,
+      conversions: 145,
+      ctr: 3.58,
+      fatigue_score: 0.65,
+      engagement_score: 0.74,
+      psychological_triggers: ['Problem-Solution', 'Certainty', 'Control']
+    }
+  ],
+  channelInsights: [
+    {
+      platform: 'Facebook',
+      total_spend: 12450,
+      total_conversions: 398,
+      avg_roas: 4.2,
+      trend: 'up',
+      recommendation: 'Increase budget by 25% - strong performance with room for scale',
+      opportunity_score: 0.85
+    },
+    {
+      platform: 'Google',
+      total_spend: 7200,
+      total_conversions: 267,
+      avg_roas: 3.7,
+      trend: 'stable',
+      recommendation: 'Test new ad copy variations - creative fatigue detected',
+      opportunity_score: 0.65
+    },
+    {
+      platform: 'LinkedIn',
+      total_spend: 4100,
+      total_conversions: 89,
+      avg_roas: 5.1,
+      trend: 'up',
+      recommendation: 'Highest ROAS platform - consider expanding targeting',
+      opportunity_score: 0.92
+    }
+  ]
+};
 
 export const fallbackRevenueStrategist = {
   recommendations: [
@@ -831,7 +906,7 @@ export const getFallbackData = (dataType: string) => {
     case 'behavioralSignals':
       return fallbackBehavioralSignals;
     case 'adCampaigns':
-      return { campaigns: fallbackAdCampaigns, total: fallbackAdCampaigns.length };
+      return fallbackAdCampaigns;
     case 'revenueStrategist':
       return fallbackRevenueStrategist;
     case 'conversionSpyEngine':

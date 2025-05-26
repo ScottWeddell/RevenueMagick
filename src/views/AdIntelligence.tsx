@@ -69,9 +69,8 @@ const AdIntelligence: React.FC = () => {
         
         if (adData) {
           setCampaigns(adData.campaigns);
-          setCreatives([]);
-          setChannelInsights([]);
-          setError('Demo Mode - Using sample data');
+          setCreatives(adData.creatives);
+          setChannelInsights(adData.channelInsights);
         }
         setIsLoading(false);
         return;
@@ -221,8 +220,8 @@ const AdIntelligence: React.FC = () => {
         
         if (adData) {
           setCampaigns(adData.campaigns);
-          setCreatives([]);
-          setChannelInsights([]);
+          setCreatives(adData.creatives);
+          setChannelInsights(adData.channelInsights);
         }
         
         setIsLoading(false);
