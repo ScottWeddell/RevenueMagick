@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Neural Glyph Icon -->
+  <g id="neural-icon">
+    <!-- Central node -->
+    <circle cx="32" cy="32" r="4" fill="#2673EC"/>
+    
+    <!-- Neural pathways - creating a signal/wave pattern -->
+    <path d="M32 32 Q20 20 14 26 Q8 32 14 38 Q20 44 32 32" stroke="#2673EC" stroke-width="2" fill="none" opacity="0.8"/>
+    <path d="M32 32 Q44 20 50 26 Q56 32 50 38 Q44 44 32 32" stroke="#2673EC" stroke-width="2" fill="none" opacity="0.8"/>
+    <path d="M32 32 Q26 14 32 8 Q38 14 32 32" stroke="#2673EC" stroke-width="2" fill="none" opacity="0.6"/>
+    <path d="M32 32 Q26 50 32 56 Q38 50 32 32" stroke="#2673EC" stroke-width="2" fill="none" opacity="0.6"/>
+    
+    <!-- Signal nodes -->
+    <circle cx="14" cy="32" r="2" fill="#2673EC" opacity="0.7"/>
+    <circle cx="50" cy="32" r="2" fill="#2673EC" opacity="0.7"/>
+    <circle cx="32" cy="14" r="2" fill="#2673EC" opacity="0.5"/>
+    <circle cx="32" cy="50" r="2" fill="#2673EC" opacity="0.5"/>
+    
+    <!-- Inner spark -->
+    <circle cx="32" cy="32" r="1" fill="#D8E8FF"/>
+  </g>
+</svg> 

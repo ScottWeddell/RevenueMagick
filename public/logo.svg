@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="240" height="60" viewBox="0 0 240 60" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Neural Glyph Symbol -->
+  <g id="neural-glyph">
+    <!-- Central node -->
+    <circle cx="30" cy="30" r="3" fill="#2673EC"/>
+    
+    <!-- Neural pathways - creating a signal/wave pattern -->
+    <path d="M30 30 Q20 20 15 25 Q10 30 15 35 Q20 40 30 30" stroke="#2673EC" stroke-width="1.5" fill="none" opacity="0.8"/>
+    <path d="M30 30 Q40 20 45 25 Q50 30 45 35 Q40 40 30 30" stroke="#2673EC" stroke-width="1.5" fill="none" opacity="0.8"/>
+    <path d="M30 30 Q25 15 30 10 Q35 15 30 30" stroke="#2673EC" stroke-width="1.5" fill="none" opacity="0.6"/>
+    <path d="M30 30 Q25 45 30 50 Q35 45 30 30" stroke="#2673EC" stroke-width="1.5" fill="none" opacity="0.6"/>
+    
+    <!-- Signal nodes -->
+    <circle cx="15" cy="30" r="1.5" fill="#2673EC" opacity="0.7"/>
+    <circle cx="45" cy="30" r="1.5" fill="#2673EC" opacity="0.7"/>
+    <circle cx="30" cy="15" r="1.5" fill="#2673EC" opacity="0.5"/>
+    <circle cx="30" cy="45" r="1.5" fill="#2673EC" opacity="0.5"/>
+    
+    <!-- Outer energy ring -->
+    <circle cx="30" cy="30" r="22" stroke="#D8E8FF" stroke-width="0.5" fill="none" opacity="0.4"/>
+    
+    <!-- Inner spark lines -->
+    <line x1="27" y1="27" x2="33" y2="33" stroke="#2673EC" stroke-width="1" opacity="0.6"/>
+    <line x1="33" y1="27" x2="27" y2="33" stroke="#2673EC" stroke-width="1" opacity="0.6"/>
+  </g>
+  
+  <!-- Revenue Text -->
+  <g id="revenue-text">
+    <text x="70" y="25" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="600" fill="#1F2B59">
+      Revenue
+    </text>
+  </g>
+  
+  <!-- Magick Text with special glyph -->
+  <g id="magick-text">
+    <text x="70" y="45" font-family="Inter, system-ui, sans-serif" font-size="18" font-weight="400" fill="#2673EC">
+      M<tspan font-size="16" dy="-2">∆</tspan><tspan dy="2">gick</tspan>
+    </text>
+  </g>
+  
+  <!-- Subtle connecting line between symbol and text -->
+  <line x1="55" y1="30" x2="65" y2="30" stroke="#D8E8FF" stroke-width="1" opacity="0.3"/>
+</svg> 

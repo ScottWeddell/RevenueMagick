@@ -1,19 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import NeuralGlyph from './NeuralGlyph';
+import RevenueMagickLogo from './RevenueMagickLogo';
 
 // Logo component with the brand's visual signature
 const Logo: React.FC = () => (
-  <div className="py-2 flex items-center gap-3">
-    <NeuralGlyph size={32} variant="complex" animated />
-    <div>
-    <h1 className="text-2xl font-display font-medium tracking-tight text-white">
-      Revenue Magick
-    </h1>
-      <div className="text-xs text-brand-ice opacity-70 font-light">
-        Decode the invisible. Unlock your profit.
-      </div>
-    </div>
+  <div className="py-2">
+    <RevenueMagickLogo size={200} variant="full" theme="dark" />
   </div>
 );
 
