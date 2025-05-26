@@ -280,14 +280,37 @@
             color: #9ca3af;
         }
         
+        /* Card Grid Layout */
+        .milestones-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+            gap: 1rem;
+            margin-top: 1rem;
+        }
+        
+        .milestone-card {
+            background: white;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            transition: box-shadow 0.2s ease;
+        }
+        
+        .milestone-card:hover {
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
         /* Collapsible Sections */
         .collapsible-header {
             cursor: pointer;
             display: flex;
             align-items: center;
-            padding: 0.125rem 0;
-            border-radius: 0.25rem;
+            padding: 0.75rem 1rem;
+            border-radius: 0;
             transition: background-color 0.2s ease;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
         }
         
         .collapsible-header:hover {
@@ -310,6 +333,7 @@
         .collapsible-content {
             overflow: hidden;
             transition: max-height 0.3s ease-out, opacity 0.3s ease-out;
+            padding: 0 1rem;
         }
         
         .collapsible-content.collapsed {
@@ -320,24 +344,10 @@
         .collapsible-content.expanded {
             max-height: none;
             opacity: 1;
+            padding: 1rem;
         }
         
-        /* Section styling */
-        .section-h1 .collapsible-header {
-            padding: 0.5rem 0;
-        }
-        
-        .section-h2 .collapsible-header {
-            padding: 0.375rem 0;
-        }
-        
-        .section-h3 .collapsible-header {
-            padding: 0.25rem 0;
-        }
-        
-        .section-h4 .collapsible-header {
-            padding: 0.125rem 0;
-        }
+
         
         /* Controls */
         .controls {
@@ -378,6 +388,19 @@
             
             .content-body {
                 padding: 1rem;
+            }
+            
+            .milestones-grid {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+            
+            .collapsible-header {
+                padding: 0.5rem 0.75rem;
+            }
+            
+            .collapsible-content.expanded {
+                padding: 0.75rem;
             }
             
             .markdown-content h1 {
@@ -536,86 +559,132 @@
             const content = document.getElementById('content');
             const headings = content.querySelectorAll('h1, h2, h3, h4, h5, h6');
             
+            // Create grid container for milestone cards
+            const gridContainer = document.createElement('div');
+            gridContainer.className = 'milestones-grid';
+            
+            // Find the main title and milestone overview
+            let mainTitle = null;
+            let overviewSection = null;
+            
             headings.forEach((heading, index) => {
-                // Skip the main title (first h1)
-                if (heading.tagName === 'H1' && index === 0) return;
-                
                 const level = parseInt(heading.tagName.charAt(1));
-                const sectionId = `section-${index}`;
                 
-                // Create collapsible wrapper
-                const wrapper = document.createElement('div');
-                wrapper.className = `collapsible-section section-h${level}`;
-                
-                // Create header with collapse icon
-                const header = document.createElement('div');
-                header.className = 'collapsible-header';
-                header.innerHTML = `
-                    <span class="collapse-icon expanded">▶</span>
-                    ${heading.outerHTML}
-                `;
-                
-                // Create content container
-                const contentContainer = document.createElement('div');
-                contentContainer.className = 'collapsible-content expanded';
-                contentContainer.id = sectionId;
-                
-                // Find all content until next heading of same or higher level
-                let nextElement = heading.nextElementSibling;
-                const elementsToMove = [];
-                
-                while (nextElement) {
-                    const isHeading = /^H[1-6]$/.test(nextElement.tagName);
-                    
-                    if (isHeading) {
-                        const nextLevel = parseInt(nextElement.tagName.charAt(1));
-                        if (nextLevel <= level) break;
-                    }
-                    
-                    elementsToMove.push(nextElement);
-                    nextElement = nextElement.nextElementSibling;
+                // Keep the main title and overview outside the grid
+                if (heading.tagName === 'H1' && index === 0) {
+                    mainTitle = heading;
+                    return;
                 }
                 
-                // Move elements to content container
-                elementsToMove.forEach(el => {
-                    contentContainer.appendChild(el);
-                });
-                
-                // Replace heading with wrapper
-                wrapper.appendChild(header);
-                wrapper.appendChild(contentContainer);
-                heading.parentNode.replaceChild(wrapper, heading);
-                
-                // Add click handler
-                header.addEventListener('click', () => {
-                    const icon = header.querySelector('.collapse-icon');
-                    const content = wrapper.querySelector('.collapsible-content');
-                    
-                    if (content.classList.contains('expanded')) {
-                        // Collapse
-                        content.style.maxHeight = content.scrollHeight + 'px';
-                        requestAnimationFrame(() => {
-                            content.style.maxHeight = '0';
-                            content.classList.remove('expanded');
-                            content.classList.add('collapsed');
-                            icon.classList.remove('expanded');
-                        });
-                    } else {
-                        // Expand
-                        content.classList.remove('collapsed');
-                        content.classList.add('expanded');
-                        content.style.maxHeight = content.scrollHeight + 'px';
-                        icon.classList.add('expanded');
-                        
-                        // Reset max-height after animation
-                        setTimeout(() => {
-                            if (content.classList.contains('expanded')) {
-                                content.style.maxHeight = 'none';
-                            }
-                        }, 300);
+                if (heading.tagName === 'H2' && heading.textContent.includes('Milestone Overview')) {
+                    overviewSection = heading;
+                    // Find and keep the overview content
+                    let nextElement = heading.nextElementSibling;
+                    while (nextElement && !(/^H[1-6]$/.test(nextElement.tagName))) {
+                        nextElement = nextElement.nextElementSibling;
                     }
-                });
+                    return;
+                }
+                
+                // Create cards for main milestone sections (H2 level)
+                if (level === 2 && heading.textContent.includes('Milestone')) {
+                    const sectionId = `section-${index}`;
+                    
+                    // Create milestone card
+                    const card = document.createElement('div');
+                    card.className = 'milestone-card';
+                    
+                    // Create collapsible wrapper
+                    const wrapper = document.createElement('div');
+                    wrapper.className = `collapsible-section section-h${level}`;
+                    
+                    // Create header with collapse icon
+                    const header = document.createElement('div');
+                    header.className = 'collapsible-header';
+                    header.innerHTML = `
+                        <span class="collapse-icon expanded">▶</span>
+                        ${heading.outerHTML}
+                    `;
+                    
+                    // Create content container
+                    const contentContainer = document.createElement('div');
+                    contentContainer.className = 'collapsible-content expanded';
+                    contentContainer.id = sectionId;
+                    
+                    // Find all content until next H2 heading
+                    let nextElement = heading.nextElementSibling;
+                    const elementsToMove = [];
+                    
+                    while (nextElement) {
+                        const isHeading = /^H[1-6]$/.test(nextElement.tagName);
+                        
+                        if (isHeading) {
+                            const nextLevel = parseInt(nextElement.tagName.charAt(1));
+                            if (nextLevel <= 2) break;
+                        }
+                        
+                        elementsToMove.push(nextElement);
+                        nextElement = nextElement.nextElementSibling;
+                    }
+                    
+                    // Move elements to content container
+                    elementsToMove.forEach(el => {
+                        contentContainer.appendChild(el);
+                    });
+                    
+                    // Build card structure
+                    wrapper.appendChild(header);
+                    wrapper.appendChild(contentContainer);
+                    card.appendChild(wrapper);
+                    gridContainer.appendChild(card);
+                    
+                    // Remove original heading
+                    heading.remove();
+                    
+                    // Add click handler
+                    header.addEventListener('click', () => {
+                        const icon = header.querySelector('.collapse-icon');
+                        const content = wrapper.querySelector('.collapsible-content');
+                        
+                        if (content.classList.contains('expanded')) {
+                            // Collapse
+                            content.style.maxHeight = content.scrollHeight + 'px';
+                            requestAnimationFrame(() => {
+                                content.style.maxHeight = '0';
+                                content.classList.remove('expanded');
+                                content.classList.add('collapsed');
+                                icon.classList.remove('expanded');
+                            });
+                        } else {
+                            // Expand
+                            content.classList.remove('collapsed');
+                            content.classList.add('expanded');
+                            content.style.maxHeight = content.scrollHeight + 'px';
+                            icon.classList.add('expanded');
+                            
+                            // Reset max-height after animation
+                            setTimeout(() => {
+                                if (content.classList.contains('expanded')) {
+                                    content.style.maxHeight = 'none';
+                                }
+                            }, 300);
+                        }
+                    });
+                }
             });
+            
+            // Insert grid after the overview section
+            if (overviewSection) {
+                let insertAfter = overviewSection;
+                let nextElement = overviewSection.nextElementSibling;
+                while (nextElement && !(/^H[1-6]$/.test(nextElement.tagName))) {
+                    insertAfter = nextElement;
+                    nextElement = nextElement.nextElementSibling;
+                }
+                insertAfter.parentNode.insertBefore(gridContainer, insertAfter.nextSibling);
+            } else {
+                content.appendChild(gridContainer);
+            }
         }
         
         function setupToggleAll() {
@@ -623,9 +692,9 @@
             let allExpanded = true;
             
             toggleButton.addEventListener('click', () => {
-                const sections = document.querySelectorAll('.collapsible-section');
+                const cards = document.querySelectorAll('.milestone-card .collapsible-section');
                 
-                sections.forEach(section => {
+                cards.forEach(section => {
                     const icon = section.querySelector('.collapse-icon');
                     const content = section.querySelector('.collapsible-content');
                     
