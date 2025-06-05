@@ -1,4 +1,4 @@
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || '/api/v1';
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 interface ApiResponse<T> {
   data?: T;
@@ -9,38 +9,153 @@ interface ApiResponse<T> {
 class ApiClient {
   private baseURL: string;
   private token: string | null = null;
+  private tokenExpiry: number | null = null;
+  private refreshPromise: Promise<void> | null = null; // Prevent concurrent refreshes
 
   constructor(baseURL: string) {
     this.baseURL = baseURL;
+    this.loadTokenFromStorage();
+    
+    // Auto-refresh token if it's expired or about to expire
+    this.ensureValidToken();
+    
+    // Set up periodic token refresh check (every 10 minutes)
+    setInterval(() => {
+      if (this.isTokenExpired()) {
+        this.ensureValidToken();
+      }
+    }, 10 * 60 * 1000);
+  }
+
+  private loadTokenFromStorage() {
     this.token = localStorage.getItem('auth_token');
+    const expiryStr = localStorage.getItem('auth_token_expiry');
+    this.tokenExpiry = expiryStr ? parseInt(expiryStr) : null;
+  }
+
+  private isTokenExpired(): boolean {
+    if (!this.token || !this.tokenExpiry) return true;
     
-    // For development, set a test token if none exists
-    if (!this.token && (import.meta as any).env?.DEV) {
-      const testToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3NDgyODA2NzAsInN1YiI6InRlc3RfdXNlciJ9.bZHwzolppCd1qomL7rHmPLbzSWnMSO_c3722NKN_2d8';
-      this.setToken(testToken);
+    // Consider token expired if it expires within the next 5 minutes
+    const fiveMinutesFromNow = Date.now() + (5 * 60 * 1000);
+    return this.tokenExpiry < fiveMinutesFromNow;
+  }
+
+  private async ensureValidToken(): Promise<void> {
+    // Prevent concurrent refresh attempts
+    if (this.refreshPromise) {
+      return this.refreshPromise;
     }
-    
-    // For production/demo, set a demo token
-    if (!this.token && (import.meta as any).env?.PROD) {
-      const demoToken = 'demo_token_for_production';
-      this.setToken(demoToken);
+
+    if (this.isTokenExpired()) {
+      console.log('🔄 Token expired or missing, generating fresh token...');
+      this.refreshPromise = this.generateFreshToken();
+      
+      try {
+        await this.refreshPromise;
+      } finally {
+        this.refreshPromise = null;
+      }
     }
   }
 
-  setToken(token: string) {
+  private async generateFreshToken(): Promise<void> {
+    let attempts = 0;
+    const maxAttempts = 3;
+
+    while (attempts < maxAttempts) {
+      try {
+        // Generate a fresh test token with 24-hour expiry using the backend endpoint
+        const response = await fetch(`${this.baseURL}/auth/generate-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            subject: 'test_user',
+            expires_hours: 24 
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          this.setToken(data.access_token, data.expires_at);
+          console.log('✅ Generated fresh token from backend');
+          
+          // Dispatch custom event for UI components to react
+          window.dispatchEvent(new CustomEvent('tokenRefreshed', { 
+            detail: { success: true, expiresAt: data.expires_at } 
+          }));
+          return;
+        } else {
+          console.warn(`Backend token generation failed (attempt ${attempts + 1}):`, response.status, response.statusText);
+        }
+      } catch (error) {
+        console.warn(`Failed to generate fresh token from backend (attempt ${attempts + 1}):`, error);
+      }
+
+      attempts++;
+      
+      // Wait before retrying (exponential backoff)
+      if (attempts < maxAttempts) {
+        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempts) * 1000));
+      }
+    }
+
+    // All attempts failed - use fallback
+    console.log('⚠️ All backend attempts failed, falling back to local token generation');
+    this.generateLocalTestToken();
+    
+    // Dispatch event for UI to show warning
+    window.dispatchEvent(new CustomEvent('tokenRefreshFailed', { 
+      detail: { fallbackUsed: true } 
+    }));
+  }
+
+  private generateLocalTestToken(): void {
+    // For development fallback, use a simple token that won't be validated by backend
+    // This should only be used when backend is not available
+    const expiryTime = Math.floor(Date.now() / 1000) + (24 * 60 * 60);
+    const token = `dev_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
+    this.setToken(token, expiryTime * 1000);
+    console.warn('🔧 Using development fallback token - backend authentication may fail');
+  }
+
+  setToken(token: string, expiryTimestamp?: number) {
     this.token = token;
     localStorage.setItem('auth_token', token);
+    
+    // If expiry not provided, decode it from the JWT
+    if (!expiryTimestamp && token) {
+      try {
+        const payload = JSON.parse(atob(token.split('.')[1]));
+        expiryTimestamp = payload.exp * 1000; // Convert to milliseconds
+      } catch (error) {
+        console.warn('Could not decode token expiry:', error);
+        // Default to 24 hours from now
+        expiryTimestamp = Date.now() + (24 * 60 * 60 * 1000);
+      }
+    }
+    
+    if (expiryTimestamp) {
+      this.tokenExpiry = expiryTimestamp;
+      localStorage.setItem('auth_token_expiry', expiryTimestamp.toString());
+    }
   }
 
   clearToken() {
     this.token = null;
+    this.tokenExpiry = null;
     localStorage.removeItem('auth_token');
+    localStorage.removeItem('auth_token_expiry');
   }
 
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
   ): Promise<T> {
+    // Ensure we have a valid token before making the request
+    await this.ensureValidToken();
+    
     const url = `${this.baseURL}${endpoint}`;
     
     const headers: Record<string, string> = {
@@ -55,13 +170,43 @@ class ApiClient {
       headers.Authorization = `Bearer ${this.token}`;
     }
 
-    const response = await fetch(url, {
+    let response = await fetch(url, {
       ...options,
       headers,
     });
 
+    // If we get a 401, try refreshing the token once more
+    if (response.status === 401 && this.token && !this.token.startsWith('dev_token_')) {
+      console.log('🔄 Received 401, attempting to refresh token...');
+      
+      // Clear the current token and refresh
+      this.clearToken();
+      await this.ensureValidToken();
+      
+      // Retry the request with the new token
+      if (this.token) {
+        headers.Authorization = `Bearer ${this.token}`;
+        response = await fetch(url, {
+          ...options,
+          headers,
+        });
+        
+        if (response.ok) {
+          return response.json();
+        }
+      }
+    }
+
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
+      
+      // Dispatch authentication error event for UI handling
+      if (response.status === 401) {
+        window.dispatchEvent(new CustomEvent('authenticationError', { 
+          detail: { status: response.status, message: errorData.detail || 'Authentication failed' } 
+        }));
+      }
+      
       throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
     }
 

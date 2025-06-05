@@ -113,7 +113,29 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       name: 'Development Monitoring', 
       path: '/dev-monitoring', 
       icon: 'M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z',
-      description: 'System Health & Metrics'
+      description: 'System Health & Metrics',
+      isSubItem: false
+    },
+    { 
+      name: 'Prompts Editor', 
+      path: '/prompts-editor', 
+      icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
+      description: 'AI Prompt Testing & Experimentation',
+      isSubItem: false
+    },
+    { 
+      name: 'Session Tracking Admin', 
+      path: '/admin', 
+      icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
+      description: 'Live Session Monitoring & Analytics',
+      isSubItem: true
+    },
+    { 
+      name: 'Tracking Script Manager', 
+      path: '/tracking-script', 
+      icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
+      description: 'Generate & Manage Tracking Scripts',
+      isSubItem: true
     },
   ];
 
@@ -224,7 +246,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
                     <Link 
                       to={item.path}
                       onClick={handleNavClick}
-                      className={`group flex flex-col p-4 rounded-xl transition-all duration-200 ${
+                      className={`group flex flex-col rounded-xl transition-all duration-200 ${
+                        item.isSubItem ? 'p-3 ml-4' : 'p-4'
+                      } ${
                         isActive 
                           ? 'bg-brand-blue text-white shadow-lg' 
                           : 'text-gray-100 hover:bg-brand-indigo hover:bg-opacity-80 hover:text-white'
@@ -232,7 +256,9 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
                     >
                       <div className="flex items-center">
                         <svg 
-                          className={`h-5 w-5 mr-3 ${isActive ? 'text-white' : 'text-brand-ice'}`}
+                          className={`h-4 w-4 mr-3 ${isActive ? 'text-white' : 'text-brand-ice'} ${
+                            item.isSubItem ? 'opacity-80' : ''
+                          }`}
                           fill="none" 
                           viewBox="0 0 24 24" 
                           stroke="currentColor"
@@ -244,9 +270,11 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
                             d={item.icon} 
                           />
                         </svg>
-                        <span className="text-sm font-medium">{item.name}</span>
+                        <span className={`font-medium ${item.isSubItem ? 'text-xs' : 'text-sm'}`}>
+                          {item.name}
+                        </span>
                       </div>
-                      <span className={`text-xs mt-1 ml-8 ${
+                      <span className={`text-xs mt-1 ${item.isSubItem ? 'ml-7' : 'ml-8'} ${
                         isActive ? 'text-brand-ice' : 'text-gray-300'
                       }`}>
                         {item.description}

@@ -8,6 +8,11 @@ import CustomerIntelligence from './views/CustomerIntelligence';
 import RevenueStrategist from './views/RevenueStrategist';
 import DevMonitoring from './views/DevMonitoring';
 import Integrations from './views/Integrations';
+import Admin from './views/Admin';
+import SessionDetails from './views/SessionDetails';
+import TrackingScript from './views/TrackingScript';
+import PromptsEditor from './views/PromptsEditor';
+import OAuthCallback from './components/OAuthCallback';
 
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
@@ -68,7 +73,12 @@ function App() {
                   <Route path="/customer-intelligence/:id" element={<CustomerIntelligence />} />
                   <Route path="/revenue-strategist" element={<RevenueStrategist />} />
               <Route path="/integrations" element={<Integrations />} />
+                  <Route path="/integrations/callback/:provider" element={<OAuthCallback />} />
                   <Route path="/dev-monitoring" element={<DevMonitoring />} />
+                  <Route path="/prompts-editor" element={<PromptsEditor />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/admin/sessions/:sessionId" element={<SessionDetails />} />
+                  <Route path="/tracking-script" element={<TrackingScript />} />
             </Routes>
               </div>
           </main>
