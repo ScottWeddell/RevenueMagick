@@ -128,14 +128,14 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       path: '/admin', 
       icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z',
       description: 'Live Session Monitoring & Analytics',
-      isSubItem: true
+      isSubItem: false
     },
     { 
       name: 'Tracking Script Manager', 
       path: '/tracking-script', 
       icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',
       description: 'Generate & Manage Tracking Scripts',
-      isSubItem: true
+      isSubItem: false
     },
   ];
 
