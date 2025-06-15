@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import IntelligenceModule from '../components/IntelligenceModule';
-import { getFallbackData, isProduction } from '../utils/fallbackData';
 import { apiClient } from '../lib/api';
 import FacebookCredentialsForm from '../components/FacebookCredentialsForm';
 import FacebookConnectionTest from '../components/FacebookConnectionTest';
@@ -8,7 +7,7 @@ import GoogleCredentialsForm from '../components/GoogleCredentialsForm';
 import GoogleConnectionTest from '../components/GoogleConnectionTest';
 import GoHighLevelCredentialsForm from '../components/GoHighLevelCredentialsForm';
 import TrackingScriptManager from '../components/TrackingScriptManager';
-import { Settings, Code, Plus, AlertCircle } from 'lucide-react';
+import { Settings, Code, Plus, AlertCircle, Trash2, RefreshCw, CheckCircle, XCircle, Clock, ExternalLink, Zap, Database, TrendingUp, Users, BarChart3, Target, Eye, Filter, Search, ChevronDown, Calendar, MessageSquare, Workflow } from 'lucide-react';
 
 interface Integration {
   id: string;
@@ -28,6 +27,28 @@ interface Integration {
   health_score?: number;
 }
 
+interface SyncProgress {
+  integration_id: string;
+  provider: string;
+  overall_status: string;
+  overall_progress: number;
+  current_stage: string | null;
+  progress_message: string;
+  phases: {
+    [key: string]: {
+      description: string;
+      status: string;
+      progress_percentage: number;
+      total_items?: number;
+      processed_items?: number;
+      started_at?: string;
+      completed_at?: string;
+      error_message?: string;
+    };
+  };
+  last_updated: string;
+}
+
 interface Provider {
   id: string;
   name: string;
@@ -45,47 +66,72 @@ const Integrations: React.FC = () => {
   const [providers, setProviders] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [selectedProvider, setSelectedProvider] = useState<any>(null);
+  const [selectedProvider, setSelectedProvider] = useState<Provider | null>(null);
   const [connectionSummary, setConnectionSummary] = useState<any>(null);
   const [showSummaryModal, setShowSummaryModal] = useState(false);
   const [testResults, setTestResults] = useState<any>(null);
   const [showTestModal, setShowTestModal] = useState(false);
   const [availableProviders, setAvailableProviders] = useState<Provider[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
-  const [isConnectModalOpen, setIsConnectModalOpen] = useState<boolean>(false);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showConnectionTest, setShowConnectionTest] = useState(false);
-  const [integrationName, setIntegrationName] = useState<string>('');
+  const [integrationName, setIntegrationName] = useState('');
+  const [syncProgress, setSyncProgress] = useState<{[key: string]: SyncProgress}>({});
+  const [syncProgressLoading, setSyncProgressLoading] = useState(false);
+
+  const fetchSyncProgress = async (token: string) => {
+    try {
+      setSyncProgressLoading(true);
+      const response = await fetch('http://localhost:8000/api/v1/integrations/sync-progress', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSyncProgress(data.sync_progress || {});
+        console.log('Fetched sync progress:', data.sync_progress);
+      } else {
+        console.warn('Failed to fetch sync progress');
+      }
+    } catch (error) {
+      console.error('Error fetching sync progress:', error);
+    } finally {
+      setSyncProgressLoading(false);
+    }
+  };
 
     const fetchData = async () => {
       setLoading(true);
     setError(null);
     
-    // If in production/deployed environment, use fallback data immediately
-    if (isProduction()) {
-      console.log('Production environment detected - using fallback integrations data');
-      const integrationsData = getFallbackData('integrations') as any;
-      
-      if (integrationsData) {
-        setIntegrations(integrationsData.integrations);
-        setAvailableProviders(integrationsData.availableProviders);
-        setError('Demo Mode - Using sample data');
-      }
-      setLoading(false);
-      return;
-    }
-    
     try {
-      // Generate auth token
+      // Use existing auth token if available, otherwise generate one for current user
+      let token = localStorage.getItem('auth_token');
+      
+      if (!token) {
+        // Get current user info from localStorage
+        const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
+        const userId = currentUser.id;
+        
+        if (!userId) {
+          throw new Error('Please log in to view integrations. No user session found.');
+        }
+        
+        // Generate auth token for current user
       const tokenResponse = await fetch('http://localhost:8000/api/v1/auth/generate-token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          user_id: 'demo-user',
-          email: 'demo@example.com'
+            subject: userId,
+            expires_hours: 24
         })
       });
 
@@ -94,7 +140,12 @@ const Integrations: React.FC = () => {
       }
 
       const tokenData = await tokenResponse.json();
-      const token = tokenData.access_token;
+        token = tokenData.access_token;
+      }
+
+      if (!token) {
+        throw new Error('No authentication token available');
+      }
 
       // Fetch real integrations from backend
       const integrationsResponse = await fetch('http://localhost:8000/api/v1/integrations/', {
@@ -111,68 +162,60 @@ const Integrations: React.FC = () => {
         realIntegrations = integrationsData.integrations || [];
         console.log('Fetched real integrations:', realIntegrations);
       } else {
-        console.warn('Failed to fetch integrations from backend, using mock data');
+        console.warn('Failed to fetch integrations from backend');
       }
 
-      // Add mock data for other integrations if no real ones exist
-      const mockIntegrations: Integration[] = [
-        {
-          id: '2',
-          user_id: 'user1',
-          business_id: 'biz1',
-          integration_type: 'ad_intelligence',
-          provider: 'google_ads',
-          name: 'Google Ads - Performance Max',
-          status: 'connected' as const,
-          created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-          last_sync: new Date(Date.now() - 600000).toISOString(),
-          sync_frequency: 'Every 10 minutes',
-          data_points_synced: 8934,
-          health_score: 95
-        },
-        {
-          id: '3',
-          user_id: 'user1',
-          business_id: 'biz1',
-          integration_type: 'customer_intelligence',
-          provider: 'hubspot',
-          name: 'HubSpot CRM',
-          status: 'connected' as const,
-          created_at: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-          last_sync: new Date(Date.now() - 180000).toISOString(),
-          sync_frequency: 'Every 3 minutes',
-          data_points_synced: 5672,
-          health_score: 92
-        },
-        {
-          id: '4',
-          user_id: 'user1',
-          business_id: 'biz1',
-          integration_type: 'behavior_intelligence',
-          provider: 'google_analytics',
-          name: 'Google Analytics 4',
-          status: 'error' as const,
-          created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-          updated_at: new Date().toISOString(),
-          last_sync: new Date(Date.now() - 3600000).toISOString(),
-          sync_frequency: 'Every hour',
-          data_points_synced: 0,
-          health_score: 0
-        }
-      ];
+      // Only use real integrations that have been actually connected and saved
+      setIntegrations(realIntegrations);
 
-      // Combine real integrations with mock data, avoiding duplicates
-      const allIntegrations = [...realIntegrations];
-      mockIntegrations.forEach(mockIntegration => {
-        if (!realIntegrations.some(real => real.provider === mockIntegration.provider)) {
-          allIntegrations.push(mockIntegration);
+      // Fetch sync progress for all integrations
+      await fetchSyncProgress(token);
+
+      // Fetch providers from backend
+      const providersResponse = await fetch('http://localhost:8000/api/v1/integrations/providers', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
         }
       });
 
-      setIntegrations(allIntegrations);
+      let backendProviders: Provider[] = [];
+      if (providersResponse.ok) {
+        const providersData = await providersResponse.json();
+        console.log('Fetched providers from backend:', providersData);
+        
+        // Transform backend provider data to frontend format
+        const transformedProviders: Provider[] = [];
+        
+        // Process each category
+        Object.entries(providersData).forEach(([categoryKey, categoryProviders]: [string, any]) => {
+          if (Array.isArray(categoryProviders)) {
+            categoryProviders.forEach((provider: any) => {
+              transformedProviders.push({
+                id: provider.id,
+                name: provider.name,
+                description: provider.description,
+                logo: provider.logo,
+                category: categoryKey,
+                capabilities: provider.capabilities || [],
+                setup_complexity: provider.setup_complexity || 'simple',
+                data_types: provider.data_types || []
+              });
+            });
+          }
+        });
+        
+        backendProviders = transformedProviders;
+        console.log('Transformed providers:', backendProviders);
+      } else {
+        console.warn('Failed to fetch providers from backend');
+      }
 
+      // Use backend providers if available, otherwise fallback to hardcoded ones
+      if (backendProviders.length > 0) {
+        setAvailableProviders(backendProviders);
+      } else {
+        // Fallback to hardcoded providers (including Facebook Conversions API)
       setAvailableProviders([
         {
           id: 'facebook_ads',
@@ -184,6 +227,16 @@ const Integrations: React.FC = () => {
           setup_complexity: 'simple',
           data_types: ['Impressions', 'Clicks', 'Conversions', 'Spend', 'CTR', 'CPC']
         },
+          {
+            id: 'facebook_conversions',
+            name: 'Facebook Conversions API',
+            description: 'Enable server-side conversion tracking for enhanced attribution and iOS 14.5+ compliance.',
+            logo: '/logos/facebook-conversions.svg',
+            category: 'ad_intelligence',
+            capabilities: ['Server-side Tracking', 'Enhanced Attribution', 'Privacy Compliance', 'Custom Events'],
+            setup_complexity: 'simple',
+            data_types: ['Conversion Events', 'Custom Events', 'User Data', 'Attribution Data']
+          },
         {
           id: 'google_ads',
           name: 'Google Ads',
@@ -265,20 +318,12 @@ const Integrations: React.FC = () => {
           data_types: ['Impressions', 'Clicks', 'Leads', 'Spend', 'Demographics']
         }
       ]);
+      }
 
       setLoading(false);
       } catch (err) {
-      console.error('Failed to fetch integrations data:', err);
-      setError(err instanceof Error ? err.message : 'Failed to load integration data');
-      
-      // Fallback to comprehensive fallback data on error
-      const integrationsData = getFallbackData('integrations') as any;
-      
-      if (integrationsData) {
-        setIntegrations(integrationsData.integrations);
-        setAvailableProviders(integrationsData.availableProviders);
-      }
-      
+        console.error('Failed to fetch integrations data:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load integration data');
         setLoading(false);
       }
     };
@@ -286,6 +331,57 @@ const Integrations: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, []);
+
+  // Periodically refresh sync progress for running syncs
+  useEffect(() => {
+    const hasRunningSyncs = Object.values(syncProgress).some(
+      progress => progress.overall_status === 'running'
+    );
+
+    if (hasRunningSyncs) {
+      const interval = setInterval(async () => {
+        try {
+          // Use existing auth token if available, otherwise generate one for current user
+          let token = localStorage.getItem('auth_token');
+          
+          if (!token) {
+            // Get current user info from localStorage
+            const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
+            const userId = currentUser.id;
+            
+            if (!userId) {
+              throw new Error('Please log in to view integrations. No user session found.');
+            }
+            
+            // Generate auth token for progress updates
+            const tokenResponse = await fetch('http://localhost:8000/api/v1/auth/generate-token', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                subject: userId,
+                expires_hours: 24
+              })
+            });
+
+            if (tokenResponse.ok) {
+              const tokenData = await tokenResponse.json();
+              token = tokenData.access_token;
+            }
+          }
+
+          if (token) {
+            await fetchSyncProgress(token);
+          }
+        } catch (error) {
+          console.error('Error refreshing sync progress:', error);
+        }
+      }, 5000); // Refresh every 5 seconds
+
+      return () => clearInterval(interval);
+    }
+  }, [syncProgress]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -371,23 +467,15 @@ const Integrations: React.FC = () => {
   };
 
   const handleConnect = (provider: Provider) => {
-    if (provider.id === 'facebook_ads') {
-      setSelectedProvider(provider);
-      setIntegrationName(`${provider.name} - Main Account`);
-      setIsConnectModalOpen(true);
-    } else if (provider.id === 'google_ads') {
-      setSelectedProvider(provider);
-      setIntegrationName(`${provider.name} - Main Account`);
-      setIsConnectModalOpen(true);
-    } else if (provider.id === 'gohighlevel') {
-      setSelectedProvider(provider);
-      setIntegrationName(`${provider.name} - CRM Integration`);
-      setIsConnectModalOpen(true);
-        } else {
-      setSelectedProvider(provider);
-      setIntegrationName(`${provider.name} - Main Account`);
-      setIsConnectModalOpen(true);
+    if (provider.id === 'hubspot') {
+      alert('HubSpot integration is coming soon! We\'re working on adding this powerful CRM integration.');
+      return;
     }
+    
+    // Use unified modal for all providers
+      setSelectedProvider(provider);
+      setIntegrationName(`${provider.name} - Main Account`);
+      setIsConnectModalOpen(true);
   };
 
   const handleSync = async (integrationId: string) => {
@@ -659,7 +747,10 @@ const Integrations: React.FC = () => {
               </div>
             
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {filteredIntegrations.map((integration) => (
+                {filteredIntegrations.map((integration) => {
+                  const progress = syncProgress[integration.id];
+                  
+                  return (
                   <div key={integration.id} className="p-6 border border-gray-200 rounded-xl hover:border-brand-blue transition-colors">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -680,6 +771,48 @@ const Integrations: React.FC = () => {
                         </span>
                       </div>
                     </div>
+
+                    {/* Sync Progress Section */}
+                    {progress && (progress.overall_status === 'running' || progress.overall_status === 'partial') && (
+                      <div className="mb-4 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-sm font-medium text-blue-900">Sync Progress</span>
+                          <span className="text-sm text-blue-700">{progress.overall_progress}%</span>
+                        </div>
+                        <div className="w-full bg-blue-200 rounded-full h-2 mb-2">
+                          <div 
+                            className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                            style={{ width: `${progress.overall_progress}%` }}
+                          ></div>
+                        </div>
+                        <p className="text-xs text-blue-700">{progress.progress_message}</p>
+                        {progress.current_stage && (
+                          <p className="text-xs text-blue-600 mt-1">Current: {progress.current_stage}</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Completed Sync Status */}
+                    {progress && progress.overall_status === 'completed' && (
+                      <div className="mb-4 p-3 bg-green-50 rounded-lg border border-green-200">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle className="w-4 h-4 text-green-600" />
+                          <span className="text-sm font-medium text-green-900">Sync Complete</span>
+                        </div>
+                        <p className="text-xs text-green-700 mt-1">{progress.progress_message}</p>
+                      </div>
+                    )}
+
+                    {/* Failed Sync Status */}
+                    {progress && progress.overall_status === 'failed' && (
+                      <div className="mb-4 p-3 bg-red-50 rounded-lg border border-red-200">
+                        <div className="flex items-center gap-2">
+                          <XCircle className="w-4 h-4 text-red-600" />
+                          <span className="text-sm font-medium text-red-900">Sync Failed</span>
+                        </div>
+                        <p className="text-xs text-red-700 mt-1">{progress.progress_message}</p>
+                      </div>
+                    )}
                     
                     <div className="space-y-3">
                       <div className="flex justify-between text-sm">
@@ -708,10 +841,10 @@ const Integrations: React.FC = () => {
                     <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
                           <button
                             onClick={() => handleSync(integration.id)}
-                          disabled={integration.status === 'syncing'}
+                          disabled={integration.status === 'syncing' || (progress && progress.overall_status === 'running')}
                           className="btn-secondary flex-1 text-sm"
                           >
-                          {integration.status === 'syncing' ? 'Syncing...' : 'Sync Now'}
+                          {integration.status === 'syncing' || (progress && progress.overall_status === 'running') ? 'Syncing...' : 'Sync Now'}
                           </button>
                           <button
                           onClick={() => handleDisconnect(integration.id)}
@@ -721,7 +854,8 @@ const Integrations: React.FC = () => {
                           </button>
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
                     </div>
               </div>
             )}
@@ -915,6 +1049,18 @@ const Integrations: React.FC = () => {
                     {selectedProvider.id === 'facebook_ads' ? (
                       <FacebookCredentialsForm
                         integrationName={integrationName}
+                        onClose={() => {
+                          setIsConnectModalOpen(false);
+                          setSelectedProvider(null);
+                          setIntegrationName('');
+                        }}
+                        onSuccess={handleCredentialsSuccess}
+                        onError={handleFacebookError}
+                      />
+                    ) : selectedProvider.id === 'facebook_conversions' ? (
+                      <FacebookCredentialsForm
+                        integrationName={integrationName}
+                        providerType="facebook_conversions"
                         onClose={() => {
                           setIsConnectModalOpen(false);
                           setSelectedProvider(null);

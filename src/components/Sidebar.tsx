@@ -117,6 +117,13 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       isSubItem: false
     },
     { 
+      name: 'Data Map', 
+      path: '/data-map', 
+      icon: 'M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4',
+      description: 'Complete Data Flow Architecture',
+      isSubItem: false
+    },
+    { 
       name: 'Prompts Editor', 
       path: '/prompts-editor', 
       icon: 'M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4',

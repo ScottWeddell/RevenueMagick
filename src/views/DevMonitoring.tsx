@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { Activity, Server, Database, Zap, AlertTriangle, CheckCircle, XCircle, Clock, TrendingUp, TrendingDown, Minus, RefreshCw, Eye, EyeOff, BarChart3, Cpu, HardDrive, Wifi, Users } from 'lucide-react';
 import IntelligenceModule from '../components/IntelligenceModule';
-import { getFallbackData, isProduction } from '../utils/fallbackData';
 
 // Types for Development Monitoring data
 interface ServiceStatus {
@@ -107,24 +107,6 @@ const DevMonitoring: React.FC = () => {
     const fetchData = async () => {
       setIsLoading(true);
       setError(null);
-      
-      // If in production/deployed environment, use fallback data immediately
-      if (isProduction()) {
-        console.log('Production environment detected - using fallback dev monitoring data');
-        const monitoringData = getFallbackData('devMonitoring') as any;
-        
-        if (monitoringData) {
-          setServices(monitoringData.services);
-          setDatabase(monitoringData.database);
-          setExternalAPIs(monitoringData.externalAPIs);
-          setInternalAPIs([]);
-          setSystemMetrics(monitoringData.systemMetrics);
-          setDataFlows([]);
-          setError('Demo Mode - Using sample data');
-        }
-        setIsLoading(false);
-        return;
-      }
       
       try {
         // Simulate API call - replace with actual monitoring API
@@ -358,18 +340,6 @@ const DevMonitoring: React.FC = () => {
       } catch (err) {
         console.error('Failed to fetch dev monitoring data:', err);
         setError(err instanceof Error ? err.message : 'Failed to load monitoring data');
-        
-        // Fallback to comprehensive fallback data on error
-        const monitoringData = getFallbackData('devMonitoring') as any;
-        
-        if (monitoringData) {
-          setServices(monitoringData.services);
-          setDatabase(monitoringData.database);
-          setExternalAPIs(monitoringData.externalAPIs);
-          setInternalAPIs([]);
-          setSystemMetrics(monitoringData.systemMetrics);
-          setDataFlows([]);
-        }
         
         setIsLoading(false);
       }

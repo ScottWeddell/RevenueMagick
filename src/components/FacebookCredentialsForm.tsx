@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 
 interface FacebookCredentialsFormProps {
   integrationName?: string;
+  providerType?: 'facebook_ads' | 'facebook_conversions';
   onSuccess: (summary: any) => void;
   onError: (error: string) => void;
   onClose: () => void;
@@ -18,6 +19,7 @@ interface FacebookCredentials {
 
 const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
   integrationName,
+  providerType = 'facebook_ads', // Default to facebook_ads for backward compatibility
   onSuccess,
   onError,
   onClose
@@ -31,6 +33,21 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
   const [showAccessToken, setShowAccessToken] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
 
+  // Determine API endpoints based on provider type
+  const getEndpoints = () => {
+    if (providerType === 'facebook_conversions') {
+      return {
+        test: '/api/v1/integrations/facebook-conversions/test-credentials',
+        save: '/api/v1/integrations/facebook-conversions/save'
+      };
+    } else {
+      return {
+        test: '/api/v1/integrations/facebook-ads/test-credentials',
+        save: '/api/v1/integrations/facebook-ads/save'
+      };
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -42,12 +59,12 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
     // Basic token format validation
     const token = credentials.accessToken.trim();
     if (token.length < 50) {
-      onError('Facebook access tokens are typically much longer (100+ characters). Please check your token.');
+      onError(`${providerType === 'facebook_conversions' ? 'Facebook Conversions API' : 'Facebook Business'} access tokens are typically much longer (100+ characters). Please check your token.`);
       return;
     }
 
     if (token.includes('test') || token === 'test_token' || token === 'your_token_here') {
-      onError('Please provide a real Facebook access token, not a test or placeholder value.');
+      onError(`Please provide a real ${providerType === 'facebook_conversions' ? 'Facebook Conversions API' : 'Facebook Business'} access token, not a test or placeholder value.`);
       return;
     }
 
@@ -55,40 +72,41 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
     setStatusMessage('Authenticating...');
 
     try {
-      // Always generate a fresh token for testing
-      setStatusMessage('Generating authentication token...');
-      const tokenResponse = await fetch('http://localhost:8000/api/v1/auth/generate-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ subject: 'test_user', expires_hours: 24 })
-      });
+      // Check if user is properly authenticated
+      let authToken = localStorage.getItem('auth_token');
+      const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
 
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to generate authentication token');
+      if (!authToken || !currentUser.id) {
+        throw new Error('Please log in to create integrations. No valid authentication found.');
       }
 
-      const tokenData = await tokenResponse.json();
-      const token = tokenData.access_token;
-      localStorage.setItem('token', token);
-      console.log('Generated fresh token:', token ? token.substring(0, 20) + '...' : 'null');
+      console.log('Using authenticated token for user:', currentUser.id);
 
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
+      const endpoints = getEndpoints();
+      
+      setStatusMessage(`Testing ${providerType === 'facebook_conversions' ? 'Facebook Conversions API' : 'Facebook Ads'} credentials...`);
+      
+      // Prepare credentials based on provider type
+      const testCredentials = providerType === 'facebook_conversions' 
+        ? {
+            accessToken: credentials.accessToken,
+            pixelId: credentials.pixelId,
+            integrationName: integrationName || 'Facebook Conversions API'
+          }
+        : {
+            accessToken: credentials.accessToken,
+            adAccountId: credentials.adAccountId,
+            integrationName: integrationName || 'Facebook Ads Integration'
+          };
 
-      console.log('Using token:', token ? token.substring(0, 20) + '...' : 'null');
-
-      setStatusMessage('Testing Facebook credentials...');
       // Test the credentials
-      const response = await fetch('http://localhost:8000/api/v1/integrations/facebook/test-credentials', {
+      const response = await fetch(`http://localhost:8000${endpoints.test}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${authToken}`
         },
-        body: JSON.stringify(credentials)
+        body: JSON.stringify(testCredentials)
       });
 
       console.log('Response status:', response.status);
@@ -105,26 +123,27 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
       if (result.valid) {
         setStatusMessage('Saving integration...');
         
-        // Check if we have ad access and show appropriate message
-        const hasAdAccess = result.userInfo?.has_ad_access;
-        const adAccessError = result.userInfo?.ad_access_error;
+        // Check if we have appropriate access and show appropriate message
+        const hasAccess = providerType === 'facebook_conversions' 
+          ? result.conversionApiAccess 
+          : result.userInfo?.has_ad_access;
+        const accessError = providerType === 'facebook_conversions'
+          ? result.error
+          : result.userInfo?.ad_access_error;
         
-        if (!hasAdAccess && adAccessError) {
+        if (!hasAccess && accessError) {
           // Show warning but still save the integration
-          console.warn('Limited permissions detected:', adAccessError);
+          console.warn('Limited permissions detected:', accessError);
         }
         
         // Save the integration (this now includes comprehensive testing)
-        const saveResponse = await fetch('http://localhost:8000/api/v1/integrations/facebook/save', {
+        const saveResponse = await fetch(`http://localhost:8000${endpoints.save}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${authToken}`
           },
-          body: JSON.stringify({
-            ...credentials,
-            integrationName: integrationName || 'Facebook Ads Integration'
-          })
+          body: JSON.stringify(testCredentials)
         });
 
         if (saveResponse.ok) {
@@ -142,7 +161,7 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
       }
     } catch (error) {
       setStatusMessage('');
-      onError(error instanceof Error ? error.message : 'Failed to connect to Facebook');
+      onError(error instanceof Error ? error.message : `Failed to connect to ${providerType === 'facebook_conversions' ? 'Facebook Conversions API' : 'Facebook Ads'}`);
     } finally {
       setIsLoading(false);
     }
@@ -153,7 +172,10 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Facebook Business Access Token *
+            {providerType === 'facebook_conversions' 
+              ? 'Facebook Conversions API Access Token *'
+              : 'Facebook Business Access Token *'
+            }
           </label>
           <div className="relative">
             <input
@@ -161,7 +183,10 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
               value={credentials.accessToken}
               onChange={(e) => setCredentials({...credentials, accessToken: e.target.value})}
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 pr-10"
-              placeholder="Enter your Facebook business access token"
+              placeholder={providerType === 'facebook_conversions' 
+                ? 'Enter your Facebook Conversions API access token'
+                : 'Enter your Facebook business access token'
+              }
               required
             />
             <button
@@ -179,13 +204,16 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
             </button>
           </div>
           <p className="text-xs text-gray-500 mt-1">
-            Find this in Business Settings → System Users → Generate New Token
+            {providerType === 'facebook_conversions'
+              ? 'Find this in Events Manager → Data Sources → Your Pixel → Settings → Conversions API'
+              : 'Find this in Business Settings → System Users → Generate New Token'
+            }
           </p>
         </div>
 
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
-            Facebook Pixel ID (Optional)
+            {providerType === 'facebook_conversions' ? 'Facebook Pixel ID *' : 'Facebook Pixel ID (Optional)'}
           </label>
           <input
             type="text"
@@ -193,12 +221,17 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
             onChange={(e) => setCredentials({...credentials, pixelId: e.target.value})}
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
             placeholder="e.g., 1234567890123456"
+            required={providerType === 'facebook_conversions'}
           />
           <p className="text-xs text-gray-500 mt-1">
-            Find this in Events Manager → Data Sources → Select your pixel
+            {providerType === 'facebook_conversions' 
+              ? 'Required for Conversions API. Find this in Events Manager → Data Sources → Select your pixel'
+              : 'Find this in Events Manager → Data Sources → Select your pixel'
+            }
           </p>
         </div>
 
+        {providerType === 'facebook_ads' && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Ad Account ID (Optional)
@@ -214,6 +247,7 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
             Leave blank to auto-detect your ad accounts
           </p>
         </div>
+        )}
 
         <div className="flex space-x-3 pt-4">
           <button
@@ -235,8 +269,31 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
       </form>
 
       <div className="p-3 bg-gray-50 rounded-lg">
-        <h4 className="text-sm font-medium text-gray-900 mb-2">How to get a Facebook Business Access Token:</h4>
+        <h4 className="text-sm font-medium text-gray-900 mb-2">
+          {providerType === 'facebook_conversions' 
+            ? 'How to get a Facebook Conversions API Access Token:'
+            : 'How to get a Facebook Business Access Token:'
+          }
+        </h4>
         <div className="text-xs text-gray-600 space-y-3">
+          {providerType === 'facebook_conversions' ? (
+            // Instructions for Facebook Conversions API
+            <div>
+              <p><strong>Events Manager (Direct Method):</strong></p>
+              <ol className="list-decimal list-inside space-y-1 ml-2">
+                <li>Go to <a href="https://business.facebook.com/events_manager" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">Facebook Events Manager</a></li>
+                <li>Select your <strong>Facebook Pixel</strong></li>
+                <li>Go to <strong>Settings</strong> → <strong>Conversions API</strong></li>
+                <li>Click <strong>"Generate Access Token"</strong></li>
+                <li>Copy the token (this is specifically for Conversions API)</li>
+              </ol>
+              
+              <div className="mt-3 p-2 bg-blue-50 rounded border border-blue-200">
+                <p className="text-blue-800"><strong>Note:</strong> This token is specifically for server-side conversion tracking and is different from regular Facebook ad management tokens.</p>
+              </div>
+            </div>
+          ) : (
+            // Instructions for Facebook Ads
           <div>
             <p><strong>Business Settings (Recommended):</strong></p>
             <ol className="list-decimal list-inside space-y-1 ml-2">
@@ -256,6 +313,7 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
               <li>Copy the generated token (starts with "EAA..." and is 100+ characters)</li>
             </ol>
           </div>
+          )}
         </div>
       </div>
 

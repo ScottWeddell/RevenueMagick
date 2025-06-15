@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { TrendingUp, TrendingDown, Minus, Activity, Zap, Target, Eye, MousePointer, Clock, AlertTriangle } from 'lucide-react';
+import { apiClient } from '../lib/api';
 
 import IntelligenceModule from '../components/IntelligenceModule';
-import { getFallbackData, isProduction } from '../utils/fallbackData';
 
 // Types for Signal Graph™ data
 interface BehavioralSignal {
@@ -47,24 +48,14 @@ const BehavioralSignals: React.FC = () => {
       setIsLoading(true);
       setError(null);
       
-      // If in production/deployed environment, use fallback data immediately
-      if (isProduction()) {
-        console.log('Production environment detected - using fallback behavioral signals data');
-        const signalsData = getFallbackData('behavioralSignals') as any;
-        
-        if (signalsData) {
-          setSignals(signalsData.signals);
-          setPatterns(signalsData.patterns);
-          setFlows(signalsData.flows);
-          setIsDemoMode(true);
-        }
-        setIsLoading(false);
-        return;
-      }
-      
       try {
-        // Import API client
-        const { apiClient } = await import('../lib/api');
+        // Check token status
+        const tokenInfo = apiClient.getTokenInfo();
+        
+        // If token is expired, refresh it
+        if (tokenInfo.isExpired) {
+          await apiClient.refreshToken();
+        }
         
         // Fetch real behavioral signals data
         const signalsData = await apiClient.getBehavioralSignals(timeRange);
@@ -103,18 +94,13 @@ const BehavioralSignals: React.FC = () => {
         setFlows(transformedFlows);
         setIsLoading(false);
       } catch (err) {
-        console.error('Failed to fetch behavioral signals data:', err);
+        // Check if it's an authentication error
+        if (err instanceof Error && err.message.includes('401')) {
+          setError('Authentication failed. Please refresh the page or try again.');
+        } else {
         setError(err instanceof Error ? err.message : 'Failed to load Signal Graph™ data');
-        
-        // Fallback to comprehensive fallback data on error
-        const signalsData = getFallbackData('behavioralSignals') as any;
-        
-        if (signalsData) {
-          setSignals(signalsData.signals);
-          setPatterns(signalsData.patterns);
-          setFlows(signalsData.flows);
-          setIsDemoMode(true);
         }
+        
         setIsLoading(false);
       }
     };
@@ -178,7 +164,7 @@ const BehavioralSignals: React.FC = () => {
   if (error) {
     return (
       <div className="bg-red-50 p-6 rounded-xl border border-red-100">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
             <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -186,6 +172,12 @@ const BehavioralSignals: React.FC = () => {
           </div>
           <p className="text-red-700 font-medium">{error}</p>
         </div>
+        <button
+          onClick={() => window.location.reload()}
+          className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
+        >
+          Retry
+        </button>
       </div>
     );
   }
@@ -238,7 +230,7 @@ const BehavioralSignals: React.FC = () => {
         <IntelligenceModule
           title="Pattern Matches"
           value={patterns.reduce((sum, p) => sum + p.user_count, 0)}
-          trend={{ direction: 'up', percentage: 18.5, period: 'last 24h' }}
+          trend={patterns.length > 5 && patterns.reduce((sum, p) => sum + p.user_count, 0) > 20 ? { direction: 'up', percentage: 18.5, period: 'last 24h' } : undefined}
           description="Users matching known patterns"
           icon={
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

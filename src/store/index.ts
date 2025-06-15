@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { fetchReadinessScore, fetchUserProfile, fetchAdMetrics } from '../services/api';
+import { setUserContext, captureException } from '../utils/sentry';
 
 // Define types
 interface ReadinessScore {
@@ -73,8 +74,10 @@ const useStore = create<AppState>((set, get) => ({
         };
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch readiness score';
+      captureException(error as Error, { action: 'fetchReadinessScore', userId });
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to fetch readiness score', 
+        error: errorMessage, 
         isLoading: false 
       });
     }
@@ -93,8 +96,10 @@ const useStore = create<AppState>((set, get) => ({
         };
       });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch user profile';
+      captureException(error as Error, { action: 'fetchUserProfile', userId });
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to fetch user profile', 
+        error: errorMessage, 
         isLoading: false 
       });
     }
@@ -106,8 +111,10 @@ const useStore = create<AppState>((set, get) => ({
       const data = await fetchAdMetrics();
       set({ adMetrics: data.metrics, isLoading: false });
     } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Failed to fetch ad metrics';
+      captureException(error as Error, { action: 'fetchAdMetrics' });
       set({ 
-        error: error instanceof Error ? error.message : 'Failed to fetch ad metrics', 
+        error: errorMessage, 
         isLoading: false 
       });
     }
@@ -115,6 +122,8 @@ const useStore = create<AppState>((set, get) => ({
   
   setCurrentUser: (userId: string) => {
     set({ currentUserId: userId });
+    // Set user context for Sentry
+    setUserContext(userId);
   },
   
   setError: (error: string | null) => {

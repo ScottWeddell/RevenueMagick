@@ -17,7 +17,7 @@ class ApiClient {
     this.loadTokenFromStorage();
     
     // Auto-refresh token if it's expired or about to expire
-    this.ensureValidToken();
+    this.initializeToken();
     
     // Set up periodic token refresh check (every 10 minutes)
     setInterval(() => {
@@ -48,7 +48,6 @@ class ApiClient {
     }
 
     if (this.isTokenExpired()) {
-      console.log('🔄 Token expired or missing, generating fresh token...');
       this.refreshPromise = this.generateFreshToken();
       
       try {
@@ -59,9 +58,24 @@ class ApiClient {
     }
   }
 
-  private async generateFreshToken(): Promise<void> {
+  private async generateFreshToken(userId?: string): Promise<void> {
     let attempts = 0;
     const maxAttempts = 3;
+
+    // Get the current user ID from localStorage or use the provided userId
+    const currentUserId = userId || this.getCurrentUserId();
+    
+    if (!currentUserId) {
+      console.warn('No user ID available for token generation - user must be logged in');
+      
+      // Dispatch event for UI to show login requirement
+      window.dispatchEvent(new CustomEvent('tokenRefreshFailed', { 
+        detail: { fallbackUsed: false, loginRequired: true } 
+      }));
+      
+      this.clearToken();
+      return;
+    }
 
     while (attempts < maxAttempts) {
       try {
@@ -70,7 +84,7 @@ class ApiClient {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ 
-            subject: 'test_user',
+            subject: currentUserId,
             expires_hours: 24 
           })
         });
@@ -78,46 +92,59 @@ class ApiClient {
         if (response.ok) {
           const data = await response.json();
           this.setToken(data.access_token, data.expires_at);
-          console.log('✅ Generated fresh token from backend');
           
           // Dispatch custom event for UI components to react
           window.dispatchEvent(new CustomEvent('tokenRefreshed', { 
             detail: { success: true, expiresAt: data.expires_at } 
           }));
           return;
-        } else {
-          console.warn(`Backend token generation failed (attempt ${attempts + 1}):`, response.status, response.statusText);
         }
       } catch (error) {
-        console.warn(`Failed to generate fresh token from backend (attempt ${attempts + 1}):`, error);
+        // Backend is not available, continue to next attempt
       }
 
       attempts++;
       
       // Wait before retrying (exponential backoff)
       if (attempts < maxAttempts) {
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempts) * 1000));
+        const delay = Math.pow(2, attempts) * 1000;
+        await new Promise(resolve => setTimeout(resolve, delay));
       }
     }
 
-    // All attempts failed - use fallback
-    console.log('⚠️ All backend attempts failed, falling back to local token generation');
-    this.generateLocalTestToken();
+    // All attempts failed - backend is not available
+    console.warn('Backend not available for token generation');
     
     // Dispatch event for UI to show warning
     window.dispatchEvent(new CustomEvent('tokenRefreshFailed', { 
-      detail: { fallbackUsed: true } 
+      detail: { fallbackUsed: false, backendUnavailable: true } 
     }));
+    
+    // Don't set a fallback token - let requests fail and require proper login
+    this.clearToken();
   }
 
-  private generateLocalTestToken(): void {
-    // For development fallback, use a simple token that won't be validated by backend
-    // This should only be used when backend is not available
-    const expiryTime = Math.floor(Date.now() / 1000) + (24 * 60 * 60);
-    const token = `dev_token_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  private getCurrentUserId(): string | null {
+    // Try to get current user from localStorage or other storage
+    const userDataStr = localStorage.getItem('current_user');
+    if (userDataStr) {
+      try {
+        const userData = JSON.parse(userDataStr);
+        return userData.id;
+      } catch (e) {
+        // Ignore parsing errors
+      }
+    }
+    return null;
+  }
+
+  // Add method to update user context
+  setCurrentUser(userId: string): void {
+    // Store current user ID for token generation
+    localStorage.setItem('current_user', JSON.stringify({ id: userId }));
     
-    this.setToken(token, expiryTime * 1000);
-    console.warn('🔧 Using development fallback token - backend authentication may fail');
+    // Clear current token so it gets regenerated for the new user
+    this.clearToken();
   }
 
   setToken(token: string, expiryTimestamp?: number) {
@@ -130,7 +157,6 @@ class ApiClient {
         const payload = JSON.parse(atob(token.split('.')[1]));
         expiryTimestamp = payload.exp * 1000; // Convert to milliseconds
       } catch (error) {
-        console.warn('Could not decode token expiry:', error);
         // Default to 24 hours from now
         expiryTimestamp = Date.now() + (24 * 60 * 60 * 1000);
       }
@@ -149,6 +175,19 @@ class ApiClient {
     localStorage.removeItem('auth_token_expiry');
   }
 
+  async refreshToken(): Promise<void> {
+    this.clearToken();
+    await this.ensureValidToken();
+  }
+
+  getTokenInfo(): { token: string | null; expiry: number | null; isExpired: boolean } {
+    return {
+      token: this.token,
+      expiry: this.tokenExpiry,
+      isExpired: this.isTokenExpired()
+    };
+  }
+
   private async request<T>(
     endpoint: string,
     options: RequestInit = {}
@@ -158,9 +197,12 @@ class ApiClient {
     
     const url = `${this.baseURL}${endpoint}`;
     
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
+    const headers: Record<string, string> = {};
+
+    // Only set Content-Type if not FormData (browser will set it automatically for FormData)
+    if (!(options.body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json';
+    }
 
     if (options.headers) {
       Object.assign(headers, options.headers);
@@ -176,9 +218,7 @@ class ApiClient {
     });
 
     // If we get a 401, try refreshing the token once more
-    if (response.status === 401 && this.token && !this.token.startsWith('dev_token_')) {
-      console.log('🔄 Received 401, attempting to refresh token...');
-      
+    if (response.status === 401 && this.token) {
       // Clear the current token and refresh
       this.clearToken();
       await this.ensureValidToken();
@@ -190,24 +230,12 @@ class ApiClient {
           ...options,
           headers,
         });
-        
-        if (response.ok) {
-          return response.json();
-        }
       }
     }
 
     if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      
-      // Dispatch authentication error event for UI handling
-      if (response.status === 401) {
-        window.dispatchEvent(new CustomEvent('authenticationError', { 
-          detail: { status: response.status, message: errorData.detail || 'Authentication failed' } 
-        }));
-      }
-      
-      throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`);
+      const errorText = await response.text();
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
     }
 
     return response.json();
@@ -222,8 +250,15 @@ class ApiClient {
     return this.request<{
       access_token: string;
       token_type: string;
-      user_id: string;
-      email: string;
+      user: {
+        id: string;
+        email: string;
+        first_name?: string;
+        last_name?: string;
+        business_id: string;
+        business_name?: string;
+        onboarding_completed: boolean;
+      };
     }>('/auth/login', {
       method: 'POST',
       body: formData,
@@ -231,16 +266,30 @@ class ApiClient {
     });
   }
 
-  async register(email: string) {
+  async register(registrationData: {
+    email: string;
+    password: string;
+    first_name: string;
+    last_name?: string;
+    business_name: string;
+    business_website?: string;
+    industry?: string;
+  }) {
     return this.request<{
       access_token: string;
       token_type: string;
-      user_id: string;
-      email: string;
-      message: string;
+      user: {
+        id: string;
+        email: string;
+        first_name?: string;
+        last_name?: string;
+        business_id: string;
+        business_name?: string;
+        onboarding_completed: boolean;
+      };
     }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify({ email }),
+      body: JSON.stringify(registrationData),
     });
   }
 
@@ -500,23 +549,79 @@ class ApiClient {
     return this.request<{
       campaigns: Array<{
         id: string;
-        external_id: string;
         name: string;
         platform: string;
         status: string;
-        budget: number;
-        objective: string;
-        performance: {
-          total_spend: number;
-          total_impressions: number;
-          total_clicks: number;
-          total_conversions: number;
-          avg_ctr: number;
-          avg_roas: number;
-        };
+        spend: number;
+        impressions: number;
+        clicks: number;
+        conversions: number;
+        ctr: number;
+        cpc: number;
+        roas: number;
+        creative_fatigue_score: number;
+        message_decay_rate: number;
+        start_date: string;
+        end_date?: string;
       }>;
       total: number;
     }>(`/analytics/campaign-performance?${searchParams}`);
+  }
+
+  async getCreativePerformance(params: {
+    campaign_id?: string;
+    platform?: string;
+    limit?: number;
+  } = {}) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, value.toString());
+      }
+    });
+
+    return this.request<{
+      creatives: Array<{
+        id: string;
+        campaign_id: string;
+        creative_type: string;
+        headline: string;
+        description: string;
+        impressions: number;
+        clicks: number;
+        conversions: number;
+        ctr: number;
+        fatigue_score: number;
+        engagement_score: number;
+        psychological_triggers: string[];
+      }>;
+      total: number;
+    }>(`/analytics/creative-performance?${searchParams}`);
+  }
+
+  async getChannelInsights(params: {
+    platform?: string;
+    limit?: number;
+  } = {}) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, value.toString());
+      }
+    });
+
+    return this.request<{
+      channels: Array<{
+        platform: string;
+          total_spend: number;
+          total_conversions: number;
+          avg_roas: number;
+        trend: string;
+        recommendation: string;
+        opportunity_score: number;
+      }>;
+      total: number;
+    }>(`/analytics/channel-insights?${searchParams}`);
   }
 
   async getUserBehaviorSummary(days: number = 30) {
@@ -625,6 +730,37 @@ class ApiClient {
     });
   }
 
+  async getStrategicRecommendations(params: {
+    category?: string;
+    limit?: number;
+  } = {}) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, value.toString());
+      }
+    });
+
+    return this.request<{
+      recommendations: Array<{
+        id: string;
+        title: string;
+        category: string;
+        priority: string;
+        impact_score: number;
+        effort_required: number;
+        expected_revenue_lift: number;
+        timeframe: string;
+        description: string;
+        action_steps: string[];
+        success_metrics: string[];
+        confidence: number;
+        business_metrics_context: any;
+      }>;
+      total: number;
+    }>(`/analytics/strategic-recommendations?${searchParams}`);
+  }
+
   async simulateRevenueImpact(scenarioData: {
     current_conversion_rate?: number;
     improvement_percentage?: number;
@@ -678,6 +814,47 @@ class ApiClient {
       recommended_implementation_order: string[];
       generated_at: string;
     }>('/strategy/small-compounding-actions');
+  }
+
+  async getRevenueSimulations() {
+    return this.request<{
+      simulations: Array<{
+        id: string;
+        scenario_name: string;
+        current_monthly_revenue: number;
+        projected_monthly_revenue: number;
+        current_conversion_rate: number;
+        projected_conversion_rate: number;
+        current_aov: number;
+        projected_aov: number;
+        current_traffic: number;
+        projected_traffic: number;
+        changes_applied: string[];
+        confidence_interval: {
+          low: number;
+          high: number;
+        };
+        timeframe: string;
+      }>;
+      total_simulations: number;
+      generated_at: string;
+    }>('/strategy/revenue-simulations');
+  }
+
+  async getMarketInsights() {
+    return this.request<{
+      insights: Array<{
+        type: string;
+        title: string;
+        description: string;
+        impact: string;
+        urgency: string;
+        recommended_actions: string[];
+        data_source: string;
+      }>;
+      total_insights: number;
+      generated_at: string;
+    }>('/strategy/market-insights');
   }
 
   // Customer Intelligence
@@ -775,6 +952,50 @@ class ApiClient {
         user_count: number;
       }>;
     }>(`/analytics/behavioral-signals?time_range=${timeRange}`);
+  }
+
+  async getDigitalBodyLanguageSessions(params: {
+    time_filter?: string;
+    limit?: number;
+  } = {}) {
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined) {
+        searchParams.append(key, value.toString());
+      }
+    });
+
+    return this.request<{
+      sessions: Array<{
+        id: string;
+        user_id: string;
+        start_time: string;
+        end_time?: string;
+        source: string;
+        device_type: string;
+        browser: string;
+        ip_address?: string;
+        readiness_score: number;
+        conversion_probability: number;
+        neuromind_profile: string;
+        behavioral_signals: {
+          scroll_velocity: number;
+          cta_hover_time: number;
+          form_interactions: number;
+          hesitation_loops: number;
+          page_revisits: number;
+          click_cadence: number;
+          viewport_engagement: number;
+        };
+      }>;
+      total: number;
+    }>(`/analytics/digital-body-language-sessions?${searchParams}`);
+  }
+
+  private async initializeToken(): Promise<void> {
+    if (this.isTokenExpired()) {
+      await this.ensureValidToken();
+    }
   }
 }
 

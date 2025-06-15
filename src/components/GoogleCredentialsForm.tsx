@@ -52,27 +52,15 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
     setStatusMessage('Authenticating...');
 
     try {
-      // Always generate a fresh token for testing
-      setStatusMessage('Generating authentication token...');
-      const tokenResponse = await fetch('http://localhost:8000/api/v1/auth/generate-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ subject: 'test_user', expires_hours: 24 })
-      });
+      // Check if user is properly authenticated
+      let authToken = localStorage.getItem('auth_token');
+      const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
 
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to generate authentication token');
+      if (!authToken || !currentUser.id) {
+        throw new Error('Please log in to create integrations. No valid authentication found.');
       }
 
-      const tokenData = await tokenResponse.json();
-      const token = tokenData.access_token;
-      localStorage.setItem('token', token);
-
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
+      console.log('Using authenticated token for user:', currentUser.id);
 
       setStatusMessage('Testing Google credentials...');
       // Test the credentials
@@ -80,7 +68,7 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${authToken}`
         },
         body: JSON.stringify(credentials)
       });
@@ -100,7 +88,7 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
+            'Authorization': `Bearer ${authToken}`
           },
           body: JSON.stringify({
             ...credentials,
@@ -121,7 +109,7 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${token}`
+                  'Authorization': `Bearer ${authToken}`
                 },
                 body: JSON.stringify({
                   credentials: credentials,
