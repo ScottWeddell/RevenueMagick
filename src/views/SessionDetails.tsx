@@ -24,6 +24,7 @@ import {
   Pause,
   RotateCcw
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface DetailedSessionData {
   id: string;
@@ -86,9 +87,12 @@ const SessionDetails: React.FC = () => {
   const [showRawData, setShowRawData] = useState<Record<string, boolean>>({});
   const [timelineFilter, setTimelineFilter] = useState<string>('all');
 
-  // API client function
+  // API client function using Supabase auth
   const apiRequest = async <T,>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-    const token = localStorage.getItem('auth_token');
+    // Get Supabase session token instead of localStorage auth_token
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    
     const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000/api/v1';
     const url = `${API_BASE_URL}${endpoint}`;
     

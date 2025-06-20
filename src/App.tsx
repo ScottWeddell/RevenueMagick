@@ -13,76 +13,73 @@ import SessionDetails from './views/SessionDetails';
 import TrackingScript from './views/TrackingScript';
 import PromptsEditor from './views/PromptsEditor';
 import DataMap from './views/DataMap';
-import OAuthCallback from './components/OAuthCallback';
 
 import Header from './components/Header';
 import Sidebar from './components/Sidebar';
 import LoginForm from './components/LoginForm';
-import { UserProvider, useUser } from './contexts/UserContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { apiClient } from './lib/api';
 
-// Main App Content (shown when authenticated)
-function AppContent() {
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
+function AuthWrapper() {
+  const { user, loading } = useAuth();
+  const [showLogin, setShowLogin] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
-  // Check if we're on mobile and manage sidebar state
   useEffect(() => {
-    const checkMobile = () => {
-      const mobile = window.innerWidth < 1024; // lg breakpoint
-      setIsMobile(mobile);
-      
-      // On desktop, sidebar should always be open
-      // On mobile, sidebar should be closed by default
-      if (!mobile) {
-        setIsSidebarOpen(true);
-      } else {
-        setIsSidebarOpen(false);
-      }
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-
-  const handleMenuClick = () => {
-    setIsSidebarOpen(!isSidebarOpen);
-  };
-
-  const handleSidebarClose = () => {
-    if (isMobile) {
-      setIsSidebarOpen(false);
+    if (!loading && !user) {
+      setShowLogin(true);
+    } else if (user) {
+      setShowLogin(false);
     }
-  };
+  }, [user, loading]);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand-blue mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (showLogin) {
+    return <LoginForm onSuccess={() => setShowLogin(false)} onError={(error) => console.error('Login error:', error)} />;
+  }
 
   return (
     <Router>
-      <div className="flex h-screen bg-gray-50">
-        <Sidebar isOpen={isSidebarOpen} onClose={handleSidebarClose} />
-        <div className={`flex-1 flex flex-col overflow-hidden relative z-10 ${
-          isMobile ? 'w-full' : ''
-        }`}>
-          <Header onMenuClick={handleMenuClick} />
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-4 sm:p-8">
-            <div className="max-w-7xl mx-auto">
-              <Routes>
-                <Route path="/" element={<Dashboard />} />
-                <Route path="/conversion-spy-engine" element={<ConversionSpyEngine />} />
-                <Route path="/behavioral-signals" element={<BehavioralSignals />} />
-                <Route path="/ad-intelligence" element={<AdIntelligence />} />
-                <Route path="/customer-intelligence" element={<CustomerIntelligence />} />
-                <Route path="/customer-intelligence/:id" element={<CustomerIntelligence />} />
-                <Route path="/revenue-strategist" element={<RevenueStrategist />} />
-                <Route path="/integrations" element={<Integrations />} />
-                <Route path="/integrations/callback/:provider" element={<OAuthCallback />} />
-                <Route path="/dev-monitoring" element={<DevMonitoring />} />
-                <Route path="/prompts-editor" element={<PromptsEditor />} />
-                <Route path="/data-map" element={<DataMap />} />
-                <Route path="/admin" element={<Admin />} />
-                <Route path="/admin/sessions/:sessionId" element={<SessionDetails />} />
-                <Route path="/tracking-script" element={<TrackingScript />} />
-              </Routes>
+      <div className="h-screen bg-gray-50 flex overflow-hidden">
+        {/* Sidebar - Full height on the left */}
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        
+        {/* Right side content - Header + Main */}
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Header */}
+          <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+          
+          {/* Main Content Area */}
+          <main className="flex-1 overflow-y-auto">
+            <div className="p-6">
+              <div className="max-w-7xl mx-auto">
+                <Routes>
+                  <Route path="/" element={<Dashboard />} />
+                  <Route path="/conversion-spy-engine" element={<ConversionSpyEngine />} />
+                  <Route path="/behavioral-signals" element={<BehavioralSignals />} />
+                  <Route path="/ad-intelligence" element={<AdIntelligence />} />
+                  <Route path="/customer-intelligence" element={<CustomerIntelligence />} />
+                  <Route path="/customer-intelligence/:id" element={<CustomerIntelligence />} />
+                  <Route path="/revenue-strategist" element={<RevenueStrategist />} />
+                  <Route path="/integrations" element={<Integrations />} />
+                  <Route path="/dev-monitoring" element={<DevMonitoring />} />
+                  <Route path="/prompts-editor" element={<PromptsEditor />} />
+                  <Route path="/data-map" element={<DataMap />} />
+                  <Route path="/admin" element={<Admin />} />
+                  <Route path="/admin/sessions/:sessionId" element={<SessionDetails />} />
+                  <Route path="/tracking-script" element={<TrackingScript />} />
+                </Routes>
+              </div>
             </div>
           </main>
         </div>
@@ -91,35 +88,11 @@ function AppContent() {
   );
 }
 
-// Authentication wrapper component
-function AuthWrapper() {
-  const { isAuthenticated, login } = useUser();
-
-  const handleLoginSuccess = (user: any) => {
-    login(user);
-  };
-
-  const handleLoginError = (error: string) => {
-    console.error('Login error:', error);
-  };
-
-  if (!isAuthenticated) {
-    return (
-      <LoginForm 
-        onSuccess={handleLoginSuccess} 
-        onError={handleLoginError} 
-      />
-    );
-  }
-
-  return <AppContent />;
-}
-
 function App() {
   return (
-    <UserProvider>
+    <AuthProvider>
       <AuthWrapper />
-    </UserProvider>
+    </AuthProvider>
   );
 }
 

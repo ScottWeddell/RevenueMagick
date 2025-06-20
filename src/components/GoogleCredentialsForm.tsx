@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { apiClient } from '../lib/api';
 
 interface GoogleCredentialsFormProps {
   integrationName?: string;
@@ -19,6 +21,8 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
   onError,
   onClose
 }) => {
+  const { user } = useAuth();
+  const [userInfo, setUserInfo] = useState<any>(null);
   const [credentials, setCredentials] = useState<GoogleCredentials>({
     accessToken: '',
     customerId: '',
@@ -27,6 +31,22 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [showAccessToken, setShowAccessToken] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  // Fetch user info from backend
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (user) {
+        try {
+          const response = await apiClient.getCurrentUser();
+          setUserInfo(response.user);
+        } catch (error) {
+          console.error('Failed to fetch user info:', error);
+        }
+      }
+    };
+
+    fetchUserInfo();
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,22 +73,19 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
 
     try {
       // Check if user is properly authenticated
-      let authToken = localStorage.getItem('auth_token');
-      const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
-
-      if (!authToken || !currentUser.id) {
+      if (!user || !userInfo?.id) {
         throw new Error('Please log in to create integrations. No valid authentication found.');
       }
 
-      console.log('Using authenticated token for user:', currentUser.id);
+      console.log('Using authenticated user:', userInfo.id);
 
       setStatusMessage('Testing Google credentials...');
-      // Test the credentials
+      // Test the credentials using apiClient
       const response = await fetch('http://localhost:8000/api/v1/integrations/google/test-credentials', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${await apiClient['getAuthToken']()}`
         },
         body: JSON.stringify(credentials)
       });
@@ -88,7 +105,7 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
+            'Authorization': `Bearer ${await apiClient['getAuthToken']()}`
           },
           body: JSON.stringify({
             ...credentials,
@@ -109,7 +126,7 @@ const GoogleCredentialsForm: React.FC<GoogleCredentialsFormProps> = ({
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'Authorization': `Bearer ${authToken}`
+                  'Authorization': `Bearer ${await apiClient['getAuthToken']()}`
                 },
                 body: JSON.stringify({
                   credentials: credentials,

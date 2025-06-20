@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useUser } from '../contexts/UserContext';
+import { useAuth } from '../contexts/AuthContext';
 import { TrendingUp, TrendingDown, Minus, BarChart3, Target, DollarSign, MousePointer, Eye, Zap, AlertTriangle } from 'lucide-react';
 
 import IntelligenceModule from '../components/IntelligenceModule';
@@ -60,7 +60,8 @@ interface OptimizationRecommendation {
 }
 
 const AdIntelligence: React.FC = () => {
-  const { currentUser } = useUser();
+  const { user } = useAuth();
+  const [userInfo, setUserInfo] = useState<any>(null);
   const [campaigns, setCampaigns] = useState<AdCampaign[]>([]);
   const [creatives, setCreatives] = useState<CreativePerformance[]>([]);
   const [channelInsights, setChannelInsights] = useState<ChannelInsight[]>([]);
@@ -77,13 +78,31 @@ const AdIntelligence: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState<string | null>(null);
 
+  // Fetch user info from backend
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (user) {
+        try {
+          const response = await apiClient.getCurrentUser();
+          setUserInfo(response.user);
+        } catch (error) {
+          console.error('Failed to fetch user info:', error);
+        }
+      }
+    };
+
+    fetchUserInfo();
+  }, [user]);
+
   useEffect(() => {
     const fetchData = async () => {
+      if (!user) return; // Only wait for user authentication, not business_id
+      
       setIsLoading(true);
       setError(null);
       
       try {
-        console.log(`Fetching ad intelligence data for business: ${currentUser?.business_id}`);
+        console.log(`Fetching ad intelligence data for authenticated user`);
         
         // Fetch real campaign performance data
         const campaignData = await apiClient.getCampaignPerformance({
@@ -99,20 +118,22 @@ const AdIntelligence: React.FC = () => {
               
               const transformedCampaign: AdCampaign = {
                 id: apiCampaign.id || `camp-${Date.now()}-${index}`,
-                name: apiCampaign.name || `Campaign ${index + 1}`,
+                name: apiCampaign.name || apiCampaign.campaign_name || `Campaign ${index + 1}`,
                 platform: (apiCampaign.platform || 'facebook') as 'facebook' | 'google' | 'linkedin' | 'tiktok',
-                status: (apiCampaign.status || 'active') as 'active' | 'paused' | 'completed',
-                budget: apiCampaign.spend ? apiCampaign.spend * 1.2 : 1000, // Estimate budget as 120% of spend
-                spend: apiCampaign.spend || 0,
-                impressions: apiCampaign.impressions || 0,
-                clicks: apiCampaign.clicks || 0,
-                conversions: apiCampaign.conversions || 0,
-                ctr: apiCampaign.ctr || 0,
+                status: (apiCampaign.status === 'ACTIVE' ? 'active' : 
+                         apiCampaign.status === 'PAUSED' ? 'paused' : 
+                         apiCampaign.status?.toLowerCase() || 'active') as 'active' | 'paused' | 'completed',
+                budget: apiCampaign.budget || (apiCampaign.spend ? apiCampaign.spend * 1.2 : 1000), // Estimate budget as 120% of spend
+                spend: apiCampaign.spend || apiCampaign.total_spend || 0,
+                impressions: apiCampaign.impressions || apiCampaign.total_impressions || 0,
+                clicks: apiCampaign.clicks || apiCampaign.total_clicks || 0,
+                conversions: apiCampaign.conversions || apiCampaign.total_conversions || 0,
+                ctr: apiCampaign.ctr || apiCampaign.avg_ctr || 0,
                 cpc: apiCampaign.cpc || (apiCampaign.spend && apiCampaign.clicks ? apiCampaign.spend / apiCampaign.clicks : 0),
-                roas: apiCampaign.roas || 0,
+                roas: apiCampaign.roas || apiCampaign.avg_roas || 0,
                 creative_fatigue_score: apiCampaign.creative_fatigue_score || Math.random() * 0.8,
                 message_decay_rate: apiCampaign.message_decay_rate || Math.random() * 0.3,
-                start_date: apiCampaign.start_date || new Date().toISOString().split('T')[0],
+                start_date: apiCampaign.start_date || apiCampaign.created_at || new Date().toISOString().split('T')[0],
                 end_date: apiCampaign.end_date
               };
               
@@ -179,9 +200,9 @@ const AdIntelligence: React.FC = () => {
                 total_spend: apiChannel.total_spend || 0,
                 total_conversions: apiChannel.total_conversions || 0,
                 avg_roas: apiChannel.avg_roas || 0,
-                trend: (apiChannel.trend || 'stable') as 'up' | 'down' | 'stable',
-                recommendation: apiChannel.recommendation || 'Monitor performance and optimize based on data',
-                opportunity_score: apiChannel.opportunity_score || 0.5
+                trend: apiChannel.trend || 'up',
+                recommendation: apiChannel.recommendation || 'Continue current strategy',
+                opportunity_score: apiChannel.opportunity_score || Math.random() * 0.8 + 0.2
               };
               
               transformedChannels.push(transformedChannel);
@@ -204,7 +225,7 @@ const AdIntelligence: React.FC = () => {
     };
 
     fetchData();
-  }, [selectedPlatform, timeRange, currentUser?.business_id]);
+  }, [selectedPlatform, timeRange, user]);
 
   const exportReport = async () => {
     setIsExporting(true);
@@ -245,7 +266,7 @@ const AdIntelligence: React.FC = () => {
           campaign.cpc.toFixed(2),
           campaign.roas.toFixed(1),
           (campaign.creative_fatigue_score * 100).toFixed(0),
-          (campaign.message_decay_rate * 100).toFixed(0)
+          (Math.min(campaign.message_decay_rate * 100, 100)).toFixed(0)
         ].join(','))
       ].join('\n');
 
@@ -655,7 +676,7 @@ const AdIntelligence: React.FC = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider w-48 max-w-48">
                   Campaign
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -678,9 +699,9 @@ const AdIntelligence: React.FC = () => {
             <tbody className="bg-white divide-y divide-gray-200">
               {campaigns.map((campaign) => (
                 <tr key={campaign.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 whitespace-nowrap">
+                  <td className="px-6 py-4 w-48 max-w-48">
                     <div>
-                      <div className="text-sm font-medium text-gray-900">{campaign.name}</div>
+                      <div className="text-sm font-medium text-gray-900 truncate" title={campaign.name}>{campaign.name}</div>
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`px-2 py-1 text-xs rounded ${getStatusColor(campaign.status)}`}>
                           {campaign.status}
@@ -697,7 +718,7 @@ const AdIntelligence: React.FC = () => {
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div>
                       <div className="text-sm font-medium text-gray-900">
-                        ${campaign.spend.toLocaleString()} / ${campaign.budget.toLocaleString()}
+                        ${campaign.spend >= 1000 ? `${(campaign.spend / 1000).toFixed(1)}k` : campaign.spend.toLocaleString()} / ${campaign.budget >= 1000 ? `${(campaign.budget / 1000).toFixed(1)}k` : campaign.budget.toLocaleString()}
                       </div>
                       <div className="w-full bg-gray-200 rounded-full h-2 mt-1">
                         <div 
@@ -745,12 +766,12 @@ const AdIntelligence: React.FC = () => {
                       <div>
                         <div className="flex justify-between text-xs mb-1">
                           <span>Message Decay</span>
-                          <span>{(campaign.message_decay_rate * 100).toFixed(0)}%</span>
+                          <span>{Math.min((campaign.message_decay_rate * 100), 100).toFixed(0)}%</span>
                         </div>
                         <div className="w-full bg-gray-200 rounded-full h-1">
                           <div 
                             className="bg-orange-500 h-1 rounded-full"
-                            style={{ width: `${campaign.message_decay_rate * 100}%` }}
+                            style={{ width: `${Math.min(campaign.message_decay_rate * 100, 100)}%` }}
                           ></div>
                         </div>
                       </div>
@@ -835,12 +856,12 @@ const AdIntelligence: React.FC = () => {
                 <div>
                   <div className="flex justify-between text-xs mb-1">
                     <span>Engagement</span>
-                    <span>{(creative.engagement_score * 100).toFixed(0)}%</span>
+                    <span>{Math.min(creative.engagement_score, 100).toFixed(0)}%</span>
                   </div>
                   <div className="w-full bg-gray-200 rounded-full h-1">
                     <div 
                       className="bg-green-500 h-1 rounded-full"
-                      style={{ width: `${creative.engagement_score * 100}%` }}
+                      style={{ width: `${Math.min(creative.engagement_score, 100)}%` }}
                     ></div>
                   </div>
                 </div>
@@ -937,6 +958,133 @@ const AdIntelligence: React.FC = () => {
                     <span className="text-gray-500">ROAS:</span>
                     <span className="font-medium">{selectedCampaign.roas.toFixed(1)}x</span>
                   </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showCreativeModal && selectedCreative && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-semibold">Creative Details</h3>
+              <button
+                onClick={() => setShowCreativeModal(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <h4 className="font-medium mb-2">{selectedCreative.headline}</h4>
+                <p className="text-gray-600 mb-3">{selectedCreative.description}</p>
+                <div className="grid grid-cols-2 gap-4 mb-4">
+                  <div>
+                    <span className="text-gray-500">Creative Type:</span>
+                    <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded capitalize">
+                      {selectedCreative.creative_type}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Campaign ID:</span>
+                    <span className="ml-2 font-medium text-sm">{selectedCreative.campaign_id}</span>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <h5 className="font-medium text-gray-900">Performance Metrics</h5>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Impressions:</span>
+                    <span className="font-medium">{selectedCreative.impressions.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Clicks:</span>
+                    <span className="font-medium">{selectedCreative.clicks.toLocaleString()}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Conversions:</span>
+                    <span className="font-medium">{selectedCreative.conversions}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">CTR:</span>
+                    <span className="font-medium">{selectedCreative.ctr.toFixed(2)}%</span>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <h5 className="font-medium text-gray-900">Health Scores</h5>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-500">Fatigue Score:</span>
+                      <span className={`font-medium ${
+                        selectedCreative.fatigue_score >= 0.7 ? 'text-red-600' :
+                        selectedCreative.fatigue_score >= 0.4 ? 'text-yellow-600' : 'text-green-600'
+                      }`}>
+                        {(selectedCreative.fatigue_score * 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className={`h-2 rounded-full ${
+                          selectedCreative.fatigue_score >= 0.7 ? 'bg-red-500' :
+                          selectedCreative.fatigue_score >= 0.4 ? 'bg-yellow-500' : 'bg-green-500'
+                        }`}
+                        style={{ width: `${selectedCreative.fatigue_score * 100}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex justify-between mb-1">
+                      <span className="text-gray-500">Engagement:</span>
+                      <span className="font-medium text-green-600">
+                        {Math.min(selectedCreative.engagement_score, 100).toFixed(0)}%
+                      </span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-2">
+                      <div 
+                        className="bg-green-500 h-2 rounded-full"
+                        style={{ width: `${Math.min(selectedCreative.engagement_score, 100)}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <div>
+                <h5 className="font-medium text-gray-900 mb-2">Psychological Triggers</h5>
+                <div className="flex flex-wrap gap-2">
+                  {selectedCreative.psychological_triggers.map((trigger, index) => (
+                    <span key={index} className="px-3 py-1 text-sm bg-purple-100 text-purple-800 rounded-full">
+                      {trigger}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <h5 className="font-medium text-blue-900 mb-2">Performance Analysis</h5>
+                <div className="text-sm text-blue-800 space-y-1">
+                  {selectedCreative.fatigue_score >= 0.7 && (
+                    <p>• ⚠️ High creative fatigue detected - consider refreshing this creative</p>
+                  )}
+                  {selectedCreative.engagement_score >= 80 && (
+                    <p>• ✅ Excellent engagement performance - above industry benchmark</p>
+                  )}
+                  {selectedCreative.ctr >= 2.0 ? (
+                    <p>• 🎯 Strong CTR performance - well-optimized targeting</p>
+                  ) : (
+                    <p>• 📈 CTR below benchmark - consider audience or creative optimization</p>
+                  )}
+                  {selectedCreative.conversions === 0 && (
+                    <p>• 🔍 No conversions yet - monitor performance and consider optimization</p>
+                  )}
                 </div>
               </div>
             </div>

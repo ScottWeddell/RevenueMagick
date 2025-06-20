@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { useUser } from '../contexts/UserContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Users, TrendingUp, TrendingDown, Minus, Target, DollarSign, Clock, Mail, Phone, MapPin, Calendar, Activity, AlertTriangle } from 'lucide-react';
 
 import ReadinessScore from '../components/ReadinessScore';
@@ -66,7 +66,8 @@ interface EngagementAction {
 
 const CustomerIntelligence: React.FC = () => {
   const { id } = useParams<{ id: string }>();
-  const { currentUser } = useUser();
+  const { user } = useAuth();
+  const [userInfo, setUserInfo] = useState<any>(null);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerProfile | null>(null);
   const [customers, setCustomers] = useState<CustomerProfile[]>([]);
   const [segments, setSegments] = useState<CustomerSegment[]>([]);
@@ -84,6 +85,37 @@ const CustomerIntelligence: React.FC = () => {
   const [isExporting, setIsExporting] = useState(false);
   const [isEngaging, setIsEngaging] = useState<string | null>(null);
   const [isCreatingSegment, setIsCreatingSegment] = useState(false);
+  
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalCustomers, setTotalCustomers] = useState(0);
+  const [paginationInfo, setPaginationInfo] = useState<{
+    total_pages: number;
+    has_next: boolean;
+    has_previous: boolean;
+    limit: number;
+  }>({
+    total_pages: 1,
+    has_next: false,
+    has_previous: false,
+    limit: 50
+  });
+
+  // Fetch user info from backend
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (user) {
+        try {
+          const response = await apiClient.getCurrentUser();
+          setUserInfo(response.user);
+        } catch (error) {
+          console.error('Failed to fetch user info:', error);
+        }
+      }
+    };
+
+    fetchUserInfo();
+  }, [user]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -91,23 +123,34 @@ const CustomerIntelligence: React.FC = () => {
       setError(null);
       
       try {
-        console.log(`Fetching customer intelligence data for business: ${currentUser?.business_id}`);
+        console.log(`Fetching customer intelligence data for business: ${userInfo?.business_id}, page: ${currentPage}`);
         
         // Import API client
         const { apiClient } = await import('../lib/api');
         
-        // Fetch real customer data
+        // Fetch real customer data with pagination
         const [customerData, segmentData, insightData] = await Promise.all([
           apiClient.getCustomerProfiles({ 
             limit: 50,
+            page: currentPage,
             profile_type: filterProfile !== 'all' ? filterProfile : undefined 
           }),
           apiClient.getCustomerSegments(),
           apiClient.getBehavioralInsights(30)
         ]);
 
+        // Update pagination info
+        const customerResponse = customerData as any;
+        setTotalCustomers(customerResponse.total || 0);
+        setPaginationInfo({
+          total_pages: customerResponse.pagination?.total_pages || 1,
+          has_next: customerResponse.pagination?.has_next || false,
+          has_previous: customerResponse.pagination?.has_previous || false,
+          limit: customerResponse.pagination?.limit || 50
+        });
+
         // Transform customer data to match interface
-        const transformedCustomers: CustomerProfile[] = customerData.customers.map(customer => ({
+        const transformedCustomers: CustomerProfile[] = customerResponse.customers.map(customer => ({
           id: customer.id,
           email: customer.email,
           first_name: customer.email?.split('@')[0] || 'User',
@@ -145,7 +188,7 @@ const CustomerIntelligence: React.FC = () => {
         }
 
         // Transform segment data
-        const transformedSegments: CustomerSegment[] = segmentData.segments.map(segment => ({
+        const transformedSegments: CustomerSegment[] = (segmentData as any).segments.map(segment => ({
           id: segment.id,
           name: segment.name,
           profile_type: segment.profile_type,
@@ -160,7 +203,7 @@ const CustomerIntelligence: React.FC = () => {
         setSegments(transformedSegments);
 
         // Transform insights data
-        const transformedInsights: BehavioralInsight[] = insightData.insights.map(insight => ({
+        const transformedInsights: BehavioralInsight[] = (insightData as any).insights.map(insight => ({
           type: insight.type as 'opportunity' | 'warning' | 'trend',
           title: insight.title,
           description: insight.description,
@@ -178,10 +221,33 @@ const CustomerIntelligence: React.FC = () => {
         
         setIsLoading(false);
       }
-     };
+    };
 
-     fetchData();
-   }, [id, viewMode, filterProfile, currentUser?.business_id]);
+    fetchData();
+  }, [id, viewMode, filterProfile, currentPage, userInfo?.business_id]);
+
+  // Pagination handlers
+  const handleNextPage = () => {
+    if (paginationInfo.has_next) {
+      setCurrentPage(prev => prev + 1);
+    }
+  };
+
+  const handlePreviousPage = () => {
+    if (paginationInfo.has_previous) {
+      setCurrentPage(prev => prev - 1);
+    }
+  };
+
+  const handlePageChange = (page: number) => {
+    setCurrentPage(page);
+  };
+
+  // Reset to first page when filter changes
+  const handleFilterChange = (newFilter: string) => {
+    setFilterProfile(newFilter);
+    setCurrentPage(1);
+  };
 
   const exportCustomerData = async () => {
     setIsExporting(true);
@@ -570,7 +636,6 @@ const CustomerIntelligence: React.FC = () => {
   }
 
   // Calculate overview metrics
-  const totalCustomers = customers.length;
   const avgReadinessScore = Math.round(customers.reduce((sum, c) => sum + c.readiness_score, 0) / customers.length);
   const highEngagementCount = customers.filter(c => c.engagement_level === 'high').length;
   const avgLifetimeValue = Math.round(customers.reduce((sum, c) => sum + c.lifetime_value, 0) / customers.length);
@@ -830,16 +895,17 @@ const CustomerIntelligence: React.FC = () => {
                 Customer Profiles
               </h3>
               <div className="flex items-center gap-2">
-                <select 
-                  value={filterProfile} 
-                  onChange={(e) => setFilterProfile(e.target.value)}
-                  className="btn-secondary text-sm"
+                <select
+                  value={filterProfile}
+                  onChange={(e) => handleFilterChange(e.target.value)}
+                  className="px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-brand-blue"
                 >
                   <option value="all">All Profiles</option>
-                  <option value="Fast-Mover">Fast-Mover</option>
-                  <option value="Proof-Driven">Proof-Driven</option>
-                  <option value="Skeptic">Skeptic</option>
-                  <option value="Optimizer">Optimizer</option>
+                  {segments.map((segment) => (
+                    <option key={segment.profile_type} value={segment.profile_type}>
+                      {segment.profile_type}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -937,6 +1003,72 @@ const CustomerIntelligence: React.FC = () => {
                   ))}
                 </tbody>
               </table>
+              
+              {/* Pagination Controls */}
+              {totalCustomers > paginationInfo.limit && (
+                <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
+                  <div className="flex items-center text-sm text-gray-700">
+                    <span>
+                      Showing {((currentPage - 1) * paginationInfo.limit) + 1} to{' '}
+                      {Math.min(currentPage * paginationInfo.limit, totalCustomers)} of{' '}
+                      {totalCustomers.toLocaleString()} customers
+                    </span>
+                  </div>
+                  
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handlePreviousPage}
+                      disabled={!paginationInfo.has_previous}
+                      className={`px-3 py-2 text-sm font-medium rounded-md border ${
+                        paginationInfo.has_previous
+                          ? 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                          : 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed'
+                      }`}
+                    >
+                      Previous
+                    </button>
+                    
+                    {/* Page Numbers */}
+                    <div className="flex items-center gap-1">
+                      {Array.from({ length: Math.min(5, paginationInfo.total_pages) }, (_, i) => {
+                        const pageNum = currentPage <= 3 
+                          ? i + 1 
+                          : currentPage >= paginationInfo.total_pages - 2
+                            ? paginationInfo.total_pages - 4 + i
+                            : currentPage - 2 + i;
+                        
+                        if (pageNum < 1 || pageNum > paginationInfo.total_pages) return null;
+                        
+                        return (
+                          <button
+                            key={pageNum}
+                            onClick={() => handlePageChange(pageNum)}
+                            className={`px-3 py-2 text-sm font-medium rounded-md ${
+                              pageNum === currentPage
+                                ? 'text-white bg-brand-blue border-brand-blue'
+                                : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                            } border`}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    
+                    <button
+                      onClick={handleNextPage}
+                      disabled={!paginationInfo.has_next}
+                      className={`px-3 py-2 text-sm font-medium rounded-md border ${
+                        paginationInfo.has_next
+                          ? 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50'
+                          : 'text-gray-400 bg-gray-100 border-gray-200 cursor-not-allowed'
+                      }`}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </>

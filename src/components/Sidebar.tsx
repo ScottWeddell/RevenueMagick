@@ -157,7 +157,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       {/* Mobile Overlay */}
       {isMobile && isOpen && (
         <div 
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black bg-opacity-50 z-[55] lg:hidden"
           onClick={onClose}
         />
       )}
@@ -166,11 +166,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
       <aside 
         id="sidebar"
         className={`
-          ${isMobile ? 'fixed' : 'relative'} 
-          ${isMobile && !isOpen ? '-translate-x-full' : 'translate-x-0'}
-          w-72 bg-brand-indigo text-white flex flex-col z-50 min-h-screen
+          w-72 bg-brand-indigo text-white flex flex-col h-full
           transition-transform duration-300 ease-in-out
-          ${isMobile ? 'top-0 left-0' : ''}
+          ${isMobile ? 'fixed top-0 left-0 h-screen z-[60]' : 'relative'} 
+          ${isMobile && !isOpen ? '-translate-x-full' : 'translate-x-0'}
         `}
       >
         {/* Mobile Close Button */}
@@ -192,7 +191,7 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen = true, onClose }) => {
           <Logo />
         </div>
         
-        <nav className="flex-1 mt-6 px-3 overflow-y-auto scrollbar-hide">
+        <nav className="flex-1 mt-6 px-3 overflow-y-auto scrollbar-hide min-h-0">
           <ul className="space-y-2">
             {navItems.map((item) => {
               const isActive = location.pathname === item.path || 

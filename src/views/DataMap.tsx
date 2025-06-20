@@ -211,30 +211,10 @@ const DataMap: React.FC = () => {
           ]
         },
         {
-          id: 'loghound-service',
-          title: 'LogHound Attribution',
-          type: 'service',
-          description: 'Advanced attribution tracking and link generation',
-          icon: <Link className="w-5 h-5" />,
-          color: 'bg-teal-100 text-teal-800',
-          endpoints: [
-            'POST /api/v1/tracking/loghound/tracking-link',
-            'POST /api/v1/tracking/loghound/mouse-behavior',
-            'GET /api/v1/tracking/loghound/heatmap'
-          ],
-          dataPoints: [
-            'Attribution tracking links',
-            'Cross-device identity resolution',
-            'UTM parameter enhancement',
-            'Conversion path reconstruction',
-            'Mouse behavior patterns'
-          ]
-        },
-        {
-          id: 'event-posting',
+          id: 'event-posting-service',
           title: 'Event Posting Service',
           type: 'service',
-          description: 'Posts conversion events to external platforms',
+          description: 'Server-side event posting to Facebook Pixel and Google Analytics',
           icon: <Zap className="w-5 h-5" />,
           color: 'bg-yellow-100 text-yellow-800',
           endpoints: [

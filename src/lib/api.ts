@@ -1,1003 +1,602 @@
-const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000/api/v1';
+import { supabase } from './supabase';
 
-interface ApiResponse<T> {
-  data?: T;
-  error?: string;
-  message?: string;
+// API Client v2.2 - Fixed exports for frontend compatibility
+const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000';
+
+// Check if API_BASE_URL already includes /api/v1
+const hasApiV1 = API_BASE_URL.includes('/api/v1');
+const baseUrl = hasApiV1 ? API_BASE_URL : `${API_BASE_URL}/api/v1`;
+
+// Simple in-memory cache for API responses
+interface CacheEntry {
+  data: any;
+  timestamp: number;
+  ttl: number;
 }
 
-class ApiClient {
-  private baseURL: string;
-  private token: string | null = null;
-  private tokenExpiry: number | null = null;
-  private refreshPromise: Promise<void> | null = null; // Prevent concurrent refreshes
+class APICache {
+  private cache = new Map<string, CacheEntry>();
+  private pendingRequests = new Map<string, Promise<any>>();
 
-  constructor(baseURL: string) {
-    this.baseURL = baseURL;
-    this.loadTokenFromStorage();
-    
-    // Auto-refresh token if it's expired or about to expire
-    this.initializeToken();
-    
-    // Set up periodic token refresh check (every 10 minutes)
-    setInterval(() => {
-      if (this.isTokenExpired()) {
-        this.ensureValidToken();
-      }
-    }, 10 * 60 * 1000);
+  private generateKey(url: string, options?: RequestInit): string {
+    const method = options?.method || 'GET';
+    const body = options?.body ? JSON.stringify(options.body) : '';
+    return `${method}:${url}:${body}`;
   }
 
-  private loadTokenFromStorage() {
-    this.token = localStorage.getItem('auth_token');
-    const expiryStr = localStorage.getItem('auth_token_expiry');
-    this.tokenExpiry = expiryStr ? parseInt(expiryStr) : null;
-  }
-
-  private isTokenExpired(): boolean {
-    if (!this.token || !this.tokenExpiry) return true;
+  get(url: string, options?: RequestInit, ttl: number = 300000): CacheEntry | null {
+    const key = this.generateKey(url, options);
+    const entry = this.cache.get(key);
     
-    // Consider token expired if it expires within the next 5 minutes
-    const fiveMinutesFromNow = Date.now() + (5 * 60 * 1000);
-    return this.tokenExpiry < fiveMinutesFromNow;
-  }
-
-  private async ensureValidToken(): Promise<void> {
-    // Prevent concurrent refresh attempts
-    if (this.refreshPromise) {
-      return this.refreshPromise;
+    if (entry && (Date.now() - entry.timestamp) < entry.ttl) {
+      return entry;
     }
-
-    if (this.isTokenExpired()) {
-      this.refreshPromise = this.generateFreshToken();
-      
-      try {
-        await this.refreshPromise;
-      } finally {
-        this.refreshPromise = null;
-      }
-    }
-  }
-
-  private async generateFreshToken(userId?: string): Promise<void> {
-    let attempts = 0;
-    const maxAttempts = 3;
-
-    // Get the current user ID from localStorage or use the provided userId
-    const currentUserId = userId || this.getCurrentUserId();
     
-    if (!currentUserId) {
-      console.warn('No user ID available for token generation - user must be logged in');
-      
-      // Dispatch event for UI to show login requirement
-      window.dispatchEvent(new CustomEvent('tokenRefreshFailed', { 
-        detail: { fallbackUsed: false, loginRequired: true } 
-      }));
-      
-      this.clearToken();
-      return;
+    // Clean up expired entry
+    if (entry) {
+      this.cache.delete(key);
     }
-
-    while (attempts < maxAttempts) {
-      try {
-        // Generate a fresh test token with 24-hour expiry using the backend endpoint
-        const response = await fetch(`${this.baseURL}/auth/generate-token`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            subject: currentUserId,
-            expires_hours: 24 
-          })
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-          this.setToken(data.access_token, data.expires_at);
-          
-          // Dispatch custom event for UI components to react
-          window.dispatchEvent(new CustomEvent('tokenRefreshed', { 
-            detail: { success: true, expiresAt: data.expires_at } 
-          }));
-          return;
-        }
-      } catch (error) {
-        // Backend is not available, continue to next attempt
-      }
-
-      attempts++;
-      
-      // Wait before retrying (exponential backoff)
-      if (attempts < maxAttempts) {
-        const delay = Math.pow(2, attempts) * 1000;
-        await new Promise(resolve => setTimeout(resolve, delay));
-      }
-    }
-
-    // All attempts failed - backend is not available
-    console.warn('Backend not available for token generation');
     
-    // Dispatch event for UI to show warning
-    window.dispatchEvent(new CustomEvent('tokenRefreshFailed', { 
-      detail: { fallbackUsed: false, backendUnavailable: true } 
-    }));
-    
-    // Don't set a fallback token - let requests fail and require proper login
-    this.clearToken();
-  }
-
-  private getCurrentUserId(): string | null {
-    // Try to get current user from localStorage or other storage
-    const userDataStr = localStorage.getItem('current_user');
-    if (userDataStr) {
-      try {
-        const userData = JSON.parse(userDataStr);
-        return userData.id;
-      } catch (e) {
-        // Ignore parsing errors
-      }
-    }
     return null;
   }
 
-  // Add method to update user context
-  setCurrentUser(userId: string): void {
-    // Store current user ID for token generation
-    localStorage.setItem('current_user', JSON.stringify({ id: userId }));
-    
-    // Clear current token so it gets regenerated for the new user
-    this.clearToken();
+  set(url: string, data: any, options?: RequestInit, ttl: number = 300000): void {
+    const key = this.generateKey(url, options);
+    this.cache.set(key, {
+      data,
+      timestamp: Date.now(),
+      ttl
+    });
   }
 
-  setToken(token: string, expiryTimestamp?: number) {
-    this.token = token;
-    localStorage.setItem('auth_token', token);
+  // Handle pending requests to prevent duplicate API calls
+  getPendingRequest(url: string, options?: RequestInit): Promise<any> | null {
+    const key = this.generateKey(url, options);
+    return this.pendingRequests.get(key) || null;
+  }
+
+  setPendingRequest(url: string, promise: Promise<any>, options?: RequestInit): void {
+    const key = this.generateKey(url, options);
+    this.pendingRequests.set(key, promise);
     
-    // If expiry not provided, decode it from the JWT
-    if (!expiryTimestamp && token) {
-      try {
-        const payload = JSON.parse(atob(token.split('.')[1]));
-        expiryTimestamp = payload.exp * 1000; // Convert to milliseconds
-      } catch (error) {
-        // Default to 24 hours from now
-        expiryTimestamp = Date.now() + (24 * 60 * 60 * 1000);
+    // Clean up when promise resolves
+    promise.finally(() => {
+      this.pendingRequests.delete(key);
+    });
+  }
+
+  invalidate(pattern?: string): void {
+    if (pattern) {
+      // Invalidate entries matching pattern
+      for (const [key] of this.cache) {
+        if (key.includes(pattern)) {
+          this.cache.delete(key);
+        }
       }
+    } else {
+      // Clear all cache
+      this.cache.clear();
     }
-    
-    if (expiryTimestamp) {
-      this.tokenExpiry = expiryTimestamp;
-      localStorage.setItem('auth_token_expiry', expiryTimestamp.toString());
-    }
+    this.pendingRequests.clear();
   }
 
-  clearToken() {
-    this.token = null;
-    this.tokenExpiry = null;
-    localStorage.removeItem('auth_token');
-    localStorage.removeItem('auth_token_expiry');
-  }
-
-  async refreshToken(): Promise<void> {
-    this.clearToken();
-    await this.ensureValidToken();
-  }
-
-  getTokenInfo(): { token: string | null; expiry: number | null; isExpired: boolean } {
+  getStats(): { size: number; keys: string[] } {
     return {
-      token: this.token,
-      expiry: this.tokenExpiry,
-      isExpired: this.isTokenExpired()
+      size: this.cache.size,
+      keys: Array.from(this.cache.keys())
+    };
+  }
+}
+
+const apiCache = new APICache();
+
+// Session cache to prevent excessive auth requests
+class SessionCache {
+  private cachedSession: any = null;
+  private cacheTimestamp: number = 0;
+  private readonly CACHE_TTL = 30000; // 30 seconds
+
+  async getSession() {
+    const now = Date.now();
+    
+    // Return cached session if still valid
+    if (this.cachedSession && (now - this.cacheTimestamp) < this.CACHE_TTL) {
+      console.log('Session cache HIT - using cached session');
+      return this.cachedSession;
+    }
+
+    // Fetch fresh session
+    console.log('Session cache MISS - fetching fresh session from Supabase');
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    // Cache the session
+    this.cachedSession = session;
+    this.cacheTimestamp = now;
+    
+    return session;
+  }
+
+  clearCache() {
+    this.cachedSession = null;
+    this.cacheTimestamp = 0;
+  }
+}
+
+const sessionCache = new SessionCache();
+
+// Listen for authentication state changes to clear cache
+if (typeof window !== 'undefined') {
+  // Clear session cache when auth state changes
+  supabase.auth.onAuthStateChange((event, session) => {
+    if (event === 'SIGNED_OUT' || event === 'TOKEN_REFRESHED' || !session) {
+      console.log('Auth state changed, clearing session cache:', event);
+      sessionCache.clearCache();
+    }
+  });
+}
+
+class ApiClient {
+  private async getAuthHeaders(): Promise<HeadersInit> {
+    const session = await sessionCache.getSession();
+    
+    if (!session?.access_token) {
+      throw new Error('No authentication token available');
+    }
+
+    return {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${session.access_token}`,
     };
   }
 
   private async request<T>(
     endpoint: string,
-    options: RequestInit = {}
+    options: RequestInit = {},
+    cacheTTL: number = 300000
   ): Promise<T> {
-    // Ensure we have a valid token before making the request
-    await this.ensureValidToken();
+    const url = `${baseUrl}${endpoint}`;
     
-    const url = `${this.baseURL}${endpoint}`;
+    // Only cache GET requests
+    const shouldCache = (!options.method || options.method === 'GET') && cacheTTL > 0;
     
-    const headers: Record<string, string> = {};
+    // Check cache first
+    if (shouldCache) {
+      const cached = apiCache.get(url, options, cacheTTL);
+      if (cached) {
+        console.log(`Cache HIT: ${endpoint}`);
+        return cached.data;
+      }
 
-    // Only set Content-Type if not FormData (browser will set it automatically for FormData)
-    if (!(options.body instanceof FormData)) {
-      headers['Content-Type'] = 'application/json';
+      // Check for pending request
+      const pending = apiCache.getPendingRequest(url, options);
+      if (pending) {
+        console.log(`Pending request: ${endpoint}`);
+        return pending;
+      }
     }
 
-    if (options.headers) {
-      Object.assign(headers, options.headers);
-    }
-
-    if (this.token) {
-      headers.Authorization = `Bearer ${this.token}`;
-    }
-
-    let response = await fetch(url, {
+    const headers = await this.getAuthHeaders();
+    
+    const requestOptions: RequestInit = {
       ...options,
-      headers,
+      headers: {
+        ...headers,
+        ...options.headers,
+      },
+    };
+
+    const requestPromise = fetch(url, requestOptions).then(async (response) => {
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`API Error: ${response.status} - ${errorText}`);
+      }
+      return response.json();
     });
 
-    // If we get a 401, try refreshing the token once more
-    if (response.status === 401 && this.token) {
-      // Clear the current token and refresh
-      this.clearToken();
-      await this.ensureValidToken();
+    // Store pending request
+    if (shouldCache) {
+      apiCache.setPendingRequest(url, requestPromise, options);
+    }
+
+    try {
+      const data = await requestPromise;
       
-      // Retry the request with the new token
-      if (this.token) {
-        headers.Authorization = `Bearer ${this.token}`;
-        response = await fetch(url, {
-          ...options,
-          headers,
-        });
+      // Cache successful response
+      if (shouldCache) {
+        apiCache.set(url, data, options, cacheTTL);
+        console.log(`Cache SET: ${endpoint} (TTL: ${cacheTTL}ms)`);
       }
+      
+      return data;
+    } catch (error) {
+      console.error(`API request failed: ${endpoint}`, error);
+      
+      // Clear session cache on auth errors
+      if (error instanceof Error && (
+        error.message.includes('401') || 
+        error.message.includes('403') || 
+        error.message.includes('Unauthorized') ||
+        error.message.includes('authentication')
+      )) {
+        console.log('Clearing session cache due to auth error');
+        sessionCache.clearCache();
+      }
+      
+      throw error;
     }
+  }
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  // Dashboard and Analytics endpoints
+  async getDashboardData(days: number = 30) {
+    return this.request(`/analytics/dashboard?days=${days}`, {}, 180000); // 3 minutes
+  }
+
+  async getBehavioralInsights(days: number = 30) {
+    return this.request(`/analytics/behavioral-insights?days=${days}`, {}, 300000); // 5 minutes
+  }
+
+  async getCustomerProfiles(options: number | { 
+    limit?: number; 
+    offset?: number;
+    page?: number;
+    profile_type?: string; 
+    min_readiness_score?: number; 
+    max_churn_risk?: number;
+  } = 50) {
+    // Handle both number and object parameters
+    let limit = 50;
+    let queryParams = '';
+    
+    if (typeof options === 'number') {
+      limit = options;
+      queryParams = `?limit=${limit}`;
+    } else {
+      const params = new URLSearchParams();
+      if (options.limit) params.append('limit', options.limit.toString());
+      if (options.offset !== undefined) params.append('offset', options.offset.toString());
+      if (options.page !== undefined) params.append('page', options.page.toString());
+      if (options.profile_type) params.append('profile_type', options.profile_type);
+      if (options.min_readiness_score) params.append('min_readiness_score', options.min_readiness_score.toString());
+      if (options.max_churn_risk) params.append('max_churn_risk', options.max_churn_risk.toString());
+      queryParams = params.toString() ? `?${params.toString()}` : '';
     }
-
-    return response.json();
+    
+    return this.request(`/analytics/customer-profiles${queryParams}`, {}, 600000); // 10 minutes
   }
 
-  // Authentication
-  async login(email: string, password: string) {
-    const formData = new FormData();
-    formData.append('username', email);
-    formData.append('password', password);
-
-    return this.request<{
-      access_token: string;
-      token_type: string;
-      user: {
-        id: string;
-        email: string;
-        first_name?: string;
-        last_name?: string;
-        business_id: string;
-        business_name?: string;
-        onboarding_completed: boolean;
-      };
-    }>('/auth/login', {
-      method: 'POST',
-      body: formData,
-      headers: {}, // Remove Content-Type to let browser set it for FormData
-    });
+  async getCustomerSegments() {
+    return this.request('/analytics/customer-segments', {}, 600000); // 10 minutes
   }
 
-  async register(registrationData: {
-    email: string;
-    password: string;
-    first_name: string;
-    last_name?: string;
-    business_name: string;
-    business_website?: string;
-    industry?: string;
-  }) {
-    return this.request<{
-      access_token: string;
-      token_type: string;
-      user: {
-        id: string;
-        email: string;
-        first_name?: string;
-        last_name?: string;
-        business_id: string;
-        business_name?: string;
-        onboarding_completed: boolean;
-      };
-    }>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(registrationData),
-    });
+  async getBehavioralSignals(timeRange: string = '24h') {
+    return this.request(`/analytics/behavioral-signals?time_range=${timeRange}`, {}, 120000); // 2 minutes
   }
 
-  async getCurrentUser() {
-    return this.request<{
-      user_id: string;
-      email: string;
-      created_at: string;
-      updated_at: string;
-    }>('/auth/me');
+  async getDigitalBodyLanguageSessions(options: number | { limit?: number; time_filter?: string } = 50) {
+    // Handle both number and object parameters
+    let queryParams = '';
+    
+    if (typeof options === 'number') {
+      queryParams = `?limit=${options}`;
+    } else {
+      const params = new URLSearchParams();
+      if (options.limit) params.append('limit', options.limit.toString());
+      if (options.time_filter) params.append('time_filter', options.time_filter);
+      queryParams = params.toString() ? `?${params.toString()}` : '';
+    }
+    
+    return this.request(`/analytics/digital-body-language-sessions${queryParams}`, {}, 300000); // 5 minutes
   }
 
-  // Users
-  async getUsers(params: {
-    page?: number;
-    page_size?: number;
-    sort_by?: string;
-    sort_direction?: string;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      users: Array<{
-        id: string;
-        email: string;
-        created_at: string;
-        updated_at: string;
-      }>;
-      total: number;
-      page: number;
-      page_size: number;
-      total_pages: number;
-    }>(`/users?${searchParams}`);
+  async getStrategicRecommendations(options: number | { limit?: number; category?: string } = 20) {
+    // Handle both number and object parameters
+    let queryParams = '';
+    
+    if (typeof options === 'number') {
+      queryParams = `?limit=${options}`;
+    } else {
+      const params = new URLSearchParams();
+      if (options.limit) params.append('limit', options.limit.toString());
+      if (options.category) params.append('category', options.category);
+      queryParams = params.toString() ? `?${params.toString()}` : '';
+    }
+    
+    return this.request(`/analytics/strategic-recommendations${queryParams}`, {}, 900000); // 15 minutes
   }
 
-  async getUser(userId: string) {
-    return this.request<{
-      id: string;
-      email: string;
-      created_at: string;
-      updated_at: string;
-    }>(`/users/${userId}`);
+  // Strategy endpoints
+  async getSmallCompoundingActions() {
+    return this.request('/strategy/small-compounding-actions', {}, 900000); // 15 minutes
   }
 
-  // Tracking
-  async trackEvent(eventData: {
-    user_id: string;
-    session_id: string;
-    event_type: string;
-    element_id?: string;
-    duration?: number;
-    metadata?: Record<string, any>;
-  }) {
-    return this.request<{
-      event_id: string;
-      status: string;
-      timestamp: string;
-    }>('/tracking/events', {
-      method: 'POST',
-      body: JSON.stringify(eventData),
-    });
+  async getRevenueSimulations() {
+    return this.request('/strategy/revenue-simulations', {}, 600000); // 10 minutes
   }
 
-  async createSession(sessionData: {
-    user_id: string;
-    source?: string;
-    referrer?: string;
-    device_type?: string;
-    browser?: string;
-    location?: string;
-  }) {
-    return this.request<{
-      session_id: string;
-      user_id: string;
-      start_time: string;
-    }>('/tracking/sessions', {
-      method: 'POST',
-      body: JSON.stringify(sessionData),
-    });
+  async getMarketInsights() {
+    return this.request('/strategy/market-insights', {}, 1800000); // 30 minutes
   }
 
-  async getUserReadinessScore(userId: string) {
-    return this.request<{
-      user_id: string;
-      score: number;
-      calculated_at: string;
-      signal_components: Record<string, any>;
-      decay_rate: number;
-    }>(`/tracking/users/${userId}/readiness-score`);
+  // Ad Intelligence endpoints
+  async getAdInsights(days: number = 30) {
+    return this.request(`/analytics/ad-metrics?days=${days}`, {}, 300000); // 5 minutes
   }
 
-  async getUserNeuromindProfile(userId: string) {
-    return this.request<{
-      user_id: string;
-      profile_type: string;
-      confidence: number;
-      created_at: string;
-      last_updated: string;
-      dominant_signals: Record<string, any>;
-    }>(`/tracking/users/${userId}/neuromind-profile`);
+  async getAdIntelligenceSummary(days: number = 30) {
+    return this.request(`/analytics/ad-intelligence-summary?days=${days}`, {}, 180000); // 3 minutes cache
   }
 
-  async getUserBehavioralSignals(userId: string, limit: number = 100) {
-    return this.request<{
-      user_id: string;
-      signals: Array<{
-        event_id: string;
-        event_type: string;
-        element_id: string;
-        duration: number;
-        timestamp: string;
-        metadata: Record<string, any>;
-      }>;
-      total_count: number;
-    }>(`/tracking/users/${userId}/behavioral-signals?limit=${limit}`);
+  async getAdPerformance(platform?: string) {
+    const query = platform ? `?platform=${platform}` : '';
+    return this.request(`/analytics/campaign-performance${query}`, {}, 300000); // 5 minutes
   }
 
-  // Integrations
-  async getIntegrations(params: {
-    user_id?: string;
-    page?: number;
-    page_size?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      integrations: Array<{
-        id: string;
-        integration_type: string;
-        provider: string;
-        name: string;
-        status: string;
-        created_at: string;
-        last_sync: string | null;
-      }>;
-      total: number;
-    }>(`/integrations?${searchParams}`);
-  }
-
-  async getIntegration(integrationId: string) {
-    return this.request<{
-      id: string;
-      integration_type: string;
-      provider: string;
-      name: string;
-      status: string;
-      settings: Record<string, any>;
-      created_at: string;
-      updated_at: string;
-      last_sync: string | null;
-    }>(`/integrations/${integrationId}`);
-  }
-
-  async createIntegration(integrationData: {
-    integration_type: string;
-    provider: string;
-    name: string;
-    status?: string;
-    credentials?: Record<string, any>;
-    settings?: Record<string, any>;
-    meta_data?: Record<string, any>;
-  }) {
-    return this.request<{
-      id: string;
-      integration_type: string;
-      provider: string;
-      name: string;
-      status: string;
-      created_at: string;
-      message: string;
-    }>('/integrations', {
-      method: 'POST',
-      body: JSON.stringify(integrationData),
-    });
-  }
-
-  async syncIntegration(integrationId: string) {
-    return this.request<{
-      sync_id: string;
-      status: string;
-      message: string;
-    }>(`/integrations/${integrationId}/sync`, {
-      method: 'POST',
-    });
+  // Integration endpoints - no caching for real-time status
+  async getIntegrations() {
+    return this.request('/integrations/', {}, 0); // No cache
   }
 
   async getIntegrationProviders() {
-    return this.request<{
-      ad_platforms: Array<{
-        provider: string;
-        name: string;
-        description: string;
-        oauth_required: boolean;
-      }>;
-      crm_platforms: Array<{
-        provider: string;
-        name: string;
-        description: string;
-        oauth_required: boolean;
-      }>;
-    }>('/integrations/providers');
-  }
+    // This endpoint is public and doesn't require authentication
+    const url = `${baseUrl}/integrations/providers`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
 
-  // Analytics
-  async getAdMetrics(params: {
-    start_date?: string;
-    end_date?: string;
-    platform?: string;
-    limit?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
+      if (!response.ok) {
+        throw new Error(`API Error: ${response.status} - ${await response.text()}`);
       }
-    });
 
-    return this.request<{
-      metrics: Array<{
-        id: string;
-        campaign_id: string;
-        ad_id: string;
-        date: string;
-        spend: number;
-        impressions: number;
-        clicks: number;
-        conversions: number;
-        ctr: number;
-        roas: number;
-        platform: string;
-      }>;
-      total: number;
-    }>(`/analytics/ad-metrics?${searchParams}`);
+      const data = await response.json();
+      console.log('✅ Successfully fetched providers without auth:', data);
+      return { providers: data };
+    } catch (error) {
+      console.error('❌ Failed to fetch providers:', error);
+      throw error;
+    }
   }
 
-  async getCampaignPerformance(params: {
-    platform?: string;
-    limit?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      campaigns: Array<{
-        id: string;
-        name: string;
-        platform: string;
-        status: string;
-        spend: number;
-        impressions: number;
-        clicks: number;
-        conversions: number;
-        ctr: number;
-        cpc: number;
-        roas: number;
-        creative_fatigue_score: number;
-        message_decay_rate: number;
-        start_date: string;
-        end_date?: string;
-      }>;
-      total: number;
-    }>(`/analytics/campaign-performance?${searchParams}`);
+  // Auth endpoints with improved caching and deduplication
+  async getTokenInfo() {
+    return this.request('/auth/user', {}, 60000); // 1 minute cache
   }
 
-  async getCreativePerformance(params: {
-    campaign_id?: string;
-    platform?: string;
-    limit?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      creatives: Array<{
-        id: string;
-        campaign_id: string;
-        creative_type: string;
-        headline: string;
-        description: string;
-        impressions: number;
-        clicks: number;
-        conversions: number;
-        ctr: number;
-        fatigue_score: number;
-        engagement_score: number;
-        psychological_triggers: string[];
-      }>;
-      total: number;
-    }>(`/analytics/creative-performance?${searchParams}`);
+  // Alias for getTokenInfo to match component expectations
+  // This method now uses the same caching and deduplication as other requests
+  async getCurrentUser() {
+    const tokenInfo = await this.getTokenInfo();
+    return { user: tokenInfo }; // Wrap in user object to match expected format
   }
 
-  async getChannelInsights(params: {
-    platform?: string;
-    limit?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      channels: Array<{
-        platform: string;
-          total_spend: number;
-          total_conversions: number;
-          avg_roas: number;
-        trend: string;
-        recommendation: string;
-        opportunity_score: number;
-      }>;
-      total: number;
-    }>(`/analytics/channel-insights?${searchParams}`);
+  // Cache management methods
+  invalidateCache(pattern?: string) {
+    apiCache.invalidate(pattern);
   }
 
-  async getUserBehaviorSummary(days: number = 30) {
-    return this.request<{
-      period: {
-        start_date: string;
-        end_date: string;
-        days: number;
-      };
-      event_summary: Array<{
-        event_type: string;
-        count: number;
-      }>;
-      readiness_score_distribution: Record<string, number>;
-      total_events: number;
-      total_scores: number;
-    }>(`/analytics/user-behavior-summary?days=${days}`);
+  getCacheStats() {
+    return apiCache.getStats();
   }
 
-  async getConversionFunnel(days: number = 30) {
-    return this.request<{
-      period: {
-        start_date: string;
-        end_date: string;
-        days: number;
-      };
-      funnel: Array<{
-        stage: string;
-        count: number;
-        conversion_rate?: number;
-      }>;
-    }>(`/analytics/conversion-funnel?days=${days}`);
+  // Dashboard sync methods
+  async syncDashboard(): Promise<any> {
+    return this.request('/analytics/sync-dashboard', {
+      method: 'POST'
+    }, 0); // No cache for sync operation
   }
 
-  async getDashboardData(days: number = 30) {
-    return this.request<{
-      period: {
-        start_date: string;
-        end_date: string;
-        days: number;
-      };
-      metric_intelligence: {
-        cvr: number;
-        aov: number;
-        roas: number;
-        mer: number;
-      };
-      customer_intelligence: {
-        total_users: number;
-        average_readiness_score: number;
-        high_readiness_users: number;
-        churn_risk: number;
-      };
-      ad_intelligence: {
-        ad_spend: number;
-        impressions: number;
-        clicks: number;
-        conversions: number;
-        ctr: number;
-      };
-      behavior_intelligence: {
-        avg_session_duration: number;
-        bounce_rate: number;
-        friction_points: number;
-      };
-      market_intelligence: {
-        market_sentiment: number;
-        competitor_price_diff: number;
-      };
-      copy_intelligence: {
-        message_resonance: number;
-        friction_analysis: number;
-      };
-      neuromind_profiles: Array<{
-        type: string;
-        count: number;
-      }>;
-      structural_tension: {
-        current_revenue: number;
-        goal_revenue: number;
-        current_cvr: number;
-        goal_cvr: number;
-        current_aov: number;
-        goal_aov: number;
-      };
-    }>(`/analytics/dashboard?days=${days}`);
+  async getSyncStatus(): Promise<any> {
+    return this.request('/analytics/sync-status', {
+      method: 'GET'
+    }, 30000); // Cache for 30 seconds
   }
 
-  // Strategy
-  async generateStrategyRecommendations(analysisData: Record<string, any>) {
-    return this.request<{
-      recommendations: Array<{
-        type: string;
-        priority: string;
-        title: string;
-        description: string;
-        action_items: string[];
-        expected_impact: string;
-      }>;
-      analysis_timestamp: string;
-      confidence_score: number;
-      total_recommendations: number;
-    }>('/strategy/recommendations', {
+  async getTaskStatus(taskId: string): Promise<any> {
+    return this.request(`/analytics/task-status/${taskId}`, {
+      method: 'GET'
+    }, 0); // No cache for task status
+  }
+
+  // Enhanced cache clearing with backend coordination
+  async clearAllCache(): Promise<any> {
+    // Clear frontend cache
+    this.invalidateCache();
+    
+    // Clear backend cache
+    try {
+      const result = await this.request('/analytics/cache-invalidate', {
+        method: 'POST'
+      }, 0);
+      return result;
+    } catch (error) {
+      console.warn('Backend cache clear failed:', error);
+      return { frontend_cleared: true, backend_cleared: false };
+    }
+  }
+
+  // Additional missing methods
+  async getCampaignPerformance(options: { platform?: string; limit?: number } = {}): Promise<any> {
+    const params = new URLSearchParams();
+    if (options.platform && options.platform !== 'all') {
+      params.append('platform', options.platform);
+    }
+    if (options.limit) {
+      params.append('limit', options.limit.toString());
+    }
+    const queryString = params.toString();
+    const endpoint = queryString ? `/analytics/campaign-performance-extended?${queryString}` : '/analytics/campaign-performance-extended';
+    return this.request(endpoint, {}, 300000); // 5 minutes cache
+  }
+
+  async getCreativePerformance(options: { platform?: string; limit?: number } = {}): Promise<any> {
+    const params = new URLSearchParams();
+    if (options.platform && options.platform !== 'all') {
+      params.append('platform', options.platform);
+    }
+    if (options.limit) {
+      params.append('limit', options.limit.toString());
+    }
+    const queryString = params.toString();
+    const endpoint = queryString ? `/analytics/creative-performance-extended?${queryString}` : '/analytics/creative-performance-extended';
+    return this.request(endpoint, {}, 300000); // 5 minutes cache
+  }
+
+  async getChannelInsights(options: { platform?: string; limit?: number } = {}): Promise<any> {
+    const params = new URLSearchParams();
+    if (options.platform && options.platform !== 'all') {
+      params.append('platform', options.platform);
+    }
+    if (options.limit) {
+      params.append('limit', options.limit.toString());
+    }
+    const queryString = params.toString();
+    const endpoint = queryString ? `/analytics/channel-insights-extended?${queryString}` : '/analytics/channel-insights-extended';
+    return this.request(endpoint, {}, 300000); // 5 minutes cache
+  }
+
+  async generateStrategyRecommendations(analysisData: any): Promise<any> {
+    return this.request('/strategy/recommendations', {
       method: 'POST',
       body: JSON.stringify(analysisData),
     });
   }
 
-  async getStrategicRecommendations(params: {
-    category?: string;
-    limit?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      recommendations: Array<{
-        id: string;
-        title: string;
-        category: string;
-        priority: string;
-        impact_score: number;
-        effort_required: number;
-        expected_revenue_lift: number;
-        timeframe: string;
-        description: string;
-        action_steps: string[];
-        success_metrics: string[];
-        confidence: number;
-        business_metrics_context: any;
-      }>;
-      total: number;
-    }>(`/analytics/strategic-recommendations?${searchParams}`);
+  async generateNeuromindProfiles(forceRegenerate: boolean = false): Promise<any> {
+    const params = forceRegenerate ? '?force_regenerate=true' : '';
+    return this.request(`/analytics/generate-neuromind-profiles${params}`, {
+      method: 'POST'
+    }, 0); // No cache for generation
   }
 
-  async simulateRevenueImpact(scenarioData: {
-    current_conversion_rate?: number;
-    improvement_percentage?: number;
-    monthly_traffic?: number;
-    average_order_value?: number;
-  }) {
-    return this.request<{
-      scenario: {
-        current_conversion_rate: number;
-        improved_conversion_rate: number;
-        improvement_percentage: number;
-        monthly_traffic: number;
-        average_order_value: number;
-      };
-      current_performance: {
-        monthly_conversions: number;
-        monthly_revenue: number;
-      };
-      projected_performance: {
-        monthly_conversions: number;
-        monthly_revenue: number;
-      };
-      impact: {
-        additional_conversions: number;
-        additional_revenue: number;
-        revenue_lift_percentage: number;
-        annual_revenue_impact: number;
-      };
-      confidence: string;
-      simulation_date: string;
-    }>('/strategy/simulate-revenue-impact', {
+  async getSyncProgress(): Promise<any> {
+    return this.request('/sync/status');
+  }
+
+  // Auth token method for credential forms
+  async getAuthToken(): Promise<string> {
+    const session = await sessionCache.getSession();
+    return session?.access_token || '';
+  }
+
+  // Token refresh method
+  async refreshToken(): Promise<void> {
+    await supabase.auth.refreshSession();
+  }
+
+  // Integration methods - all authenticated and secure
+  async testGoHighLevelCredentials(credentials: any): Promise<any> {
+    return this.request('/integrations/gohighlevel/test-credentials', {
       method: 'POST',
-      body: JSON.stringify(scenarioData),
-    });
+      body: JSON.stringify(credentials)
+    }, 0); // No cache for testing
   }
 
-  async getSmallCompoundingActions() {
-    return this.request<{
-      actions: Array<{
-        id: string;
-        title: string;
-        description: string;
-        effort_level: string;
-        implementation_time: string;
-        expected_impact: string;
-        category: string;
-        priority_score: number;
-      }>;
-      total_actions: number;
-      estimated_cumulative_impact: string;
-      recommended_implementation_order: string[];
-      generated_at: string;
-    }>('/strategy/small-compounding-actions');
+  async saveGoHighLevelIntegration(credentials: any): Promise<any> {
+    return this.request('/integrations/gohighlevel/save', {
+      method: 'POST',
+      body: JSON.stringify(credentials)
+    }, 0); // No cache for saving
   }
 
-  async getRevenueSimulations() {
-    return this.request<{
-      simulations: Array<{
-        id: string;
-        scenario_name: string;
-        current_monthly_revenue: number;
-        projected_monthly_revenue: number;
-        current_conversion_rate: number;
-        projected_conversion_rate: number;
-        current_aov: number;
-        projected_aov: number;
-        current_traffic: number;
-        projected_traffic: number;
-        changes_applied: string[];
-        confidence_interval: {
-          low: number;
-          high: number;
-        };
-        timeframe: string;
-      }>;
-      total_simulations: number;
-      generated_at: string;
-    }>('/strategy/revenue-simulations');
+  async testFacebookCredentials(credentials: any): Promise<any> {
+    return this.request('/integrations/facebook/test-credentials', {
+      method: 'POST',
+      body: JSON.stringify(credentials)
+    }, 0); // No cache for testing
   }
 
-  async getMarketInsights() {
-    return this.request<{
-      insights: Array<{
-        type: string;
-        title: string;
-        description: string;
-        impact: string;
-        urgency: string;
-        recommended_actions: string[];
-        data_source: string;
-      }>;
-      total_insights: number;
-      generated_at: string;
-    }>('/strategy/market-insights');
+  async saveFacebookIntegration(credentials: any): Promise<any> {
+    return this.request('/integrations/facebook/save', {
+      method: 'POST',
+      body: JSON.stringify(credentials)
+    }, 0); // No cache for saving
   }
 
-  // Customer Intelligence
-  async getCustomerProfiles(params: {
-    limit?: number;
-    profile_type?: string;
-    min_readiness_score?: number;
-    max_churn_risk?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      customers: Array<{
-        id: string;
-        email?: string;
-        neuromind_profile: string;
-        readiness_score: number;
-        engagement_level: string;
-        churn_risk: number;
-        lifetime_value: number;
-        acquisition_source: string;
-        first_seen: string;
-        last_activity: string;
-        total_sessions: number;
-        avg_session_duration: number;
-        conversion_probability: number;
-        journey_stage: string;
-      }>;
-      total: number;
-    }>(`/analytics/customer-profiles?${searchParams}`);
+  async deleteIntegration(integrationId: string): Promise<any> {
+    return this.request(`/integrations/${integrationId}`, {
+      method: 'DELETE'
+    }, 0); // No cache for deletion
   }
 
-  async getCustomerSegments() {
-    return this.request<{
-      segments: Array<{
-        id: string;
-        name: string;
-        profile_type: string;
-        user_count: number;
-        avg_readiness_score: number;
-        conversion_rate: number;
-        avg_lifetime_value: number;
-        characteristics: string[];
-        recommended_actions: string[];
-      }>;
-      total: number;
-    }>('/analytics/customer-segments');
+  async getDataPointsStats(integrationId?: string): Promise<any> {
+    const params = integrationId ? `?integration_id=${integrationId}` : '';
+    return this.request(`/integrations/data-points/stats${params}`, {
+      method: 'GET'
+    }, 300); // Cache for 5 minutes
   }
 
-  async getBehavioralInsights(days: number = 30) {
-    return this.request<{
-      insights: Array<{
-        type: string;
-        title: string;
-        description: string;
-        affected_users: number;
-        confidence: number;
-        action_items: string[];
-      }>;
-      total: number;
-    }>(`/analytics/behavioral-insights?days=${days}`);
+  // UTM Attribution Analysis endpoints
+  async getUtmAttributionAnalysis(options: { 
+    platform?: string; 
+    utm_source?: string; 
+    utm_campaign?: string; 
+    days?: number 
+  } = {}): Promise<any> {
+    const params = new URLSearchParams();
+    if (options.platform) params.append('platform', options.platform);
+    if (options.utm_source) params.append('utm_source', options.utm_source);
+    if (options.utm_campaign) params.append('utm_campaign', options.utm_campaign);
+    if (options.days) params.append('days', options.days.toString());
+    
+    const queryString = params.toString();
+    const endpoint = queryString ? `/analytics/utm-attribution-analysis?${queryString}` : '/analytics/utm-attribution-analysis';
+    return this.request(endpoint, {}, 300000); // 5 minutes cache
   }
 
-  // Behavioral Signals
-  async getBehavioralSignals(timeRange: string = '24h') {
-    return this.request<{
-      signals: Array<{
-        id: string;
-        name: string;
-        type: string;
-        strength: number;
-        frequency: number;
-        impact_score: number;
-        trend: string;
-        description: string;
-      }>;
-      patterns: Array<{
-        id: string;
-        name: string;
-        signals: string[];
-        conversion_correlation: number;
-        user_count: number;
-        pattern_type: string;
-      }>;
-      flows: Array<{
-        from_signal: string;
-        to_signal: string;
-        transition_probability: number;
-        avg_time_between: number;
-        user_count: number;
-      }>;
-    }>(`/analytics/behavioral-signals?time_range=${timeRange}`);
+  async getConversionAttributionMapping(days: number = 30): Promise<any> {
+    return this.request(`/analytics/conversion-attribution-mapping?days=${days}`, {}, 600000); // 10 minutes cache
   }
 
-  async getDigitalBodyLanguageSessions(params: {
-    time_filter?: string;
-    limit?: number;
-  } = {}) {
-    const searchParams = new URLSearchParams();
-    Object.entries(params).forEach(([key, value]) => {
-      if (value !== undefined) {
-        searchParams.append(key, value.toString());
-      }
-    });
-
-    return this.request<{
-      sessions: Array<{
-        id: string;
-        user_id: string;
-        start_time: string;
-        end_time?: string;
-        source: string;
-        device_type: string;
-        browser: string;
-        ip_address?: string;
-        readiness_score: number;
-        conversion_probability: number;
-        neuromind_profile: string;
-        behavioral_signals: {
-          scroll_velocity: number;
-          cta_hover_time: number;
-          form_interactions: number;
-          hesitation_loops: number;
-          page_revisits: number;
-          click_cadence: number;
-          viewport_engagement: number;
-        };
-      }>;
-      total: number;
-    }>(`/analytics/digital-body-language-sessions?${searchParams}`);
-  }
-
-  private async initializeToken(): Promise<void> {
-    if (this.isTokenExpired()) {
-      await this.ensureValidToken();
-    }
+  // Clear all caches including session cache
+  clearAllCaches() {
+    this.invalidateCache();
+    sessionCache.clearCache();
   }
 }
 
-export const apiClient = new ApiClient(API_BASE_URL);
-export default apiClient; 
+// Create the API client instance
+const apiClient = new ApiClient();
+
+// Make apiClient globally accessible for debugging
+if (typeof window !== 'undefined') {
+  (window as any).apiClient = apiClient;
+  (window as any).clearDashboardCache = () => {
+    console.log('🧹 Clearing all frontend cache across all dashboard views...');
+    apiClient.invalidateCache();
+    console.log('✅ Frontend cache cleared! Refresh any dashboard view to see fresh data.');
+  };
+  (window as any).syncDashboard = async () => {
+    console.log('🔄 Triggering comprehensive dashboard sync across ALL views...');
+    try {
+      const result = await apiClient.syncDashboard();
+      console.log('✅ Comprehensive dashboard sync triggered:', result);
+      console.log(`📊 Recalculating ${result.endpoints_recalculating?.length || 14} dashboard endpoints...`);
+      return result;
+    } catch (error) {
+      console.error('❌ Dashboard sync failed:', error);
+      throw error;
+    }
+  };
+  (window as any).clearAllCache = async () => {
+    console.log('🧹 Clearing ALL cache (frontend + backend) across all dashboard views...');
+    try {
+      const result = await apiClient.clearAllCache();
+      console.log('✅ All cache cleared across all views:', result);
+      return result;
+    } catch (error) {
+      console.error('❌ Cache clearing failed:', error);
+      throw error;
+    }
+  };
+}
+
+// Export as both default and named export for compatibility
+export default apiClient;
+export { apiClient };
+
+// Also export as apiClient2 for components that reference it
+export const apiClient2 = apiClient; 

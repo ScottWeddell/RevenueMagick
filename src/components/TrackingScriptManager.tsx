@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { Copy, Download, ExternalLink, CheckCircle, AlertCircle, Code, Zap, Eye, MousePointer, Activity } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 // Create a simple API client instance for this component
 const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 const apiRequest = async <T,>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-  const token = localStorage.getItem('auth_token');
+  // Get Supabase session token instead of localStorage auth_token
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token;
+  
   const url = `${API_BASE_URL}${endpoint}`;
   
   const headers: Record<string, string> = {

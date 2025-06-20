@@ -7,6 +7,7 @@
     "@heroicons/react": "^2.0.18",
     "@sentry/react": "^9.29.0",
     "@sentry/tracing": "^7.120.3",
+    "@supabase/supabase-js": "^2.50.0",
     "@tailwindcss/typography": "^0.5.16",
     "autoprefixer": "^10.4.16",
     "axios": "^1.6.2",

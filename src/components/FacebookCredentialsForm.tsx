@@ -1,4 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
+import { apiClient } from '../lib/api';
 
 interface FacebookCredentialsFormProps {
   integrationName?: string;
@@ -24,6 +26,7 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
   onError,
   onClose
 }) => {
+  const { user } = useAuth();
   const [credentials, setCredentials] = useState<FacebookCredentials>({
     accessToken: '',
     pixelId: '',
@@ -42,8 +45,8 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
       };
     } else {
       return {
-        test: '/api/v1/integrations/facebook-ads/test-credentials',
-        save: '/api/v1/integrations/facebook-ads/save'
+        test: '/api/v1/integrations/facebook/test-credentials',
+        save: '/api/v1/integrations/facebook/save'
       };
     }
   };
@@ -73,14 +76,11 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
 
     try {
       // Check if user is properly authenticated
-      let authToken = localStorage.getItem('auth_token');
-      const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
-
-      if (!authToken || !currentUser.id) {
+      if (!user?.id) {
         throw new Error('Please log in to create integrations. No valid authentication found.');
       }
 
-      console.log('Using authenticated token for user:', currentUser.id);
+      console.log('Using authenticated user:', user.id);
 
       const endpoints = getEndpoints();
       
@@ -95,16 +95,17 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
           }
         : {
             accessToken: credentials.accessToken,
+            pixelId: credentials.pixelId,
             adAccountId: credentials.adAccountId,
             integrationName: integrationName || 'Facebook Ads Integration'
           };
 
-      // Test the credentials
+      // Test the credentials using apiClient
       const response = await fetch(`http://localhost:8000${endpoints.test}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${await apiClient['getAuthToken']()}`
         },
         body: JSON.stringify(testCredentials)
       });
@@ -141,7 +142,7 @@ const FacebookCredentialsForm: React.FC<FacebookCredentialsFormProps> = ({
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
+            'Authorization': `Bearer ${await apiClient['getAuthToken']()}`
           },
           body: JSON.stringify(testCredentials)
         });

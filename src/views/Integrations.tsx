@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import IntelligenceModule from '../components/IntelligenceModule';
+import { Plus, Settings, Code, AlertCircle, CheckCircle, XCircle, Clock, Zap, Database, BarChart3, Users, Target, TrendingUp, Loader2 } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../lib/api';
+import IntelligenceModule from '../components/IntelligenceModule';
 import FacebookCredentialsForm from '../components/FacebookCredentialsForm';
-import FacebookConnectionTest from '../components/FacebookConnectionTest';
 import GoogleCredentialsForm from '../components/GoogleCredentialsForm';
-import GoogleConnectionTest from '../components/GoogleConnectionTest';
 import GoHighLevelCredentialsForm from '../components/GoHighLevelCredentialsForm';
 import TrackingScriptManager from '../components/TrackingScriptManager';
-import { Settings, Code, Plus, AlertCircle, Trash2, RefreshCw, CheckCircle, XCircle, Clock, ExternalLink, Zap, Database, TrendingUp, Users, BarChart3, Target, Eye, Filter, Search, ChevronDown, Calendar, MessageSquare, Workflow } from 'lucide-react';
+import { PlusIcon, CheckCircleIcon, ExclamationTriangleIcon, ArrowPathIcon, TrashIcon, Cog6ToothIcon, ChartBarIcon, ClockIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface Integration {
   id: string;
@@ -34,18 +34,17 @@ interface SyncProgress {
   overall_progress: number;
   current_stage: string | null;
   progress_message: string;
-  phases: {
-    [key: string]: {
-      description: string;
-      status: string;
-      progress_percentage: number;
-      total_items?: number;
-      processed_items?: number;
-      started_at?: string;
-      completed_at?: string;
-      error_message?: string;
-    };
-  };
+  phases: Array<{
+    type: string;
+    description: string;
+    status: string;
+    progress_percentage: number;
+    total_items?: number;
+    processed_items?: number;
+    started_at?: string;
+    completed_at?: string;
+    error_message?: string;
+  }>;
   last_updated: string;
 }
 
@@ -61,6 +60,7 @@ interface Provider {
 }
 
 const Integrations: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
   const [activeTab, setActiveTab] = useState<'integrations' | 'tracking-script'>('integrations');
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [providers, setProviders] = useState<any[]>([]);
@@ -76,312 +76,126 @@ const Integrations: React.FC = () => {
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
   const [showWizard, setShowWizard] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [showConnectionTest, setShowConnectionTest] = useState(false);
-  const [integrationName, setIntegrationName] = useState('');
-  const [syncProgress, setSyncProgress] = useState<{[key: string]: SyncProgress}>({});
-  const [syncProgressLoading, setSyncProgressLoading] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<Record<string, any>>({});
+  const [dataPointsStats, setDataPointsStats] = useState<any>(null);
 
-  const fetchSyncProgress = async (token: string) => {
+  const loadDataPointsStats = async () => {
     try {
-      setSyncProgressLoading(true);
-      const response = await fetch('http://localhost:8000/api/v1/integrations/sync-progress', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSyncProgress(data.sync_progress || {});
-        console.log('Fetched sync progress:', data.sync_progress);
-      } else {
-        console.warn('Failed to fetch sync progress');
-      }
+      const stats = await apiClient.getDataPointsStats();
+      setDataPointsStats(stats);
     } catch (error) {
-      console.error('Error fetching sync progress:', error);
-    } finally {
-      setSyncProgressLoading(false);
+      console.error('Error loading data points stats:', error);
     }
   };
 
-    const fetchData = async () => {
+  // Simple data fetching without complex caching
+  const fetchData = async () => {
+    try {
       setLoading(true);
-    setError(null);
+      setError(null);
+
+      console.log('🔄 Starting integrations data fetch...');
+      console.log('👤 Current user:', user?.id || 'No user');
+
+      // Fetch integrations data
+      const [integrationsResponse, providersResponse] = await Promise.all([
+        apiClient.getIntegrations().catch(error => {
+          console.error('❌ Error fetching integrations:', error);
+          return { integrations: [] };
+        }),
+        apiClient.getIntegrationProviders().catch(error => {
+          console.error('❌ Error fetching providers:', error);
+          return { providers: {} };
+        })
+      ]);
+
+      console.log('📊 Raw integrations response:', integrationsResponse);
+      console.log('🔌 Raw providers response:', providersResponse);
+
+      if (integrationsResponse && (integrationsResponse as any).integrations) {
+        setIntegrations((integrationsResponse as any).integrations);
+        console.log('✅ Set integrations:', (integrationsResponse as any).integrations.length);
+      } else {
+        console.log('⚠️ No integrations found in response');
+        setIntegrations([]);
+      }
+
+      if (providersResponse && (providersResponse as any).providers) {
+        const transformedProviders = Object.entries((providersResponse as any).providers).map(([category, providers]: [string, any]) => 
+          (providers as any[]).map(provider => ({ ...provider, category }))
+        ).flat();
+        
+        setAvailableProviders(transformedProviders);
+        setProviders(transformedProviders);
+        console.log('✅ Set providers:', transformedProviders.length, 'providers');
+      } else {
+        console.log('⚠️ No providers found in response');
+        setAvailableProviders([]);
+        setProviders([]);
+        if (!error) {
+          setError('No integration providers available from backend');
+        }
+      }
+
+      // Load data points stats
+      await loadDataPointsStats();
+
+    } catch (error: any) {
+      console.error('❌ Error fetching integrations data:', error);
+      console.error('❌ Error stack:', error.stack);
+      setError(error.message || 'Failed to load integrations data');
+      
+      // Don't set fallback providers - show real error state
+      setAvailableProviders([]);
+      setProviders([]);
+    } finally {
+      setLoading(false);
+      console.log('✅ Finished integrations data fetch');
+    }
+  };
+
+  // Simple sync progress fetching
+  const fetchSyncProgress = async () => {
+    if (!user) return;
     
     try {
-      // Use existing auth token if available, otherwise generate one for current user
-      let token = localStorage.getItem('auth_token');
+      console.log('🔄 Fetching sync progress...');
       
-      if (!token) {
-        // Get current user info from localStorage
-        const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
-        const userId = currentUser.id;
-        
-        if (!userId) {
-          throw new Error('Please log in to view integrations. No user session found.');
-        }
-        
-        // Generate auth token for current user
-      const tokenResponse = await fetch('http://localhost:8000/api/v1/auth/generate-token', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-            subject: userId,
-            expires_hours: 24
-        })
-      });
-
-      if (!tokenResponse.ok) {
-        throw new Error('Failed to generate auth token');
-      }
-
-      const tokenData = await tokenResponse.json();
-        token = tokenData.access_token;
-      }
-
-      if (!token) {
-        throw new Error('No authentication token available');
-      }
-
-      // Fetch real integrations from backend
-      const integrationsResponse = await fetch('http://localhost:8000/api/v1/integrations/', {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        }
-      });
-
-      let realIntegrations: Integration[] = [];
-      if (integrationsResponse.ok) {
-        const integrationsData = await integrationsResponse.json();
-        realIntegrations = integrationsData.integrations || [];
-        console.log('Fetched real integrations:', realIntegrations);
+      const response = await apiClient.getSyncProgress() as any;
+      console.log('📊 Sync progress response:', response);
+      
+      if (response && response.sync_progress && typeof response.sync_progress === 'object') {
+        setSyncProgress(response.sync_progress || {});
+        console.log('✅ Sync progress updated:', Object.keys(response.sync_progress).length, 'integrations');
       } else {
-        console.warn('Failed to fetch integrations from backend');
+        console.warn('⚠️ No sync progress data in response:', response);
+        setSyncProgress({});
       }
+    } catch (error: any) {
+      console.error('❌ Error fetching sync progress:', error);
+      setSyncProgress({});
+    }
+  };
 
-      // Only use real integrations that have been actually connected and saved
-      setIntegrations(realIntegrations);
-
-      // Fetch sync progress for all integrations
-      await fetchSyncProgress(token);
-
-      // Fetch providers from backend
-      const providersResponse = await fetch('http://localhost:8000/api/v1/integrations/providers', {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      let backendProviders: Provider[] = [];
-      if (providersResponse.ok) {
-        const providersData = await providersResponse.json();
-        console.log('Fetched providers from backend:', providersData);
-        
-        // Transform backend provider data to frontend format
-        const transformedProviders: Provider[] = [];
-        
-        // Process each category
-        Object.entries(providersData).forEach(([categoryKey, categoryProviders]: [string, any]) => {
-          if (Array.isArray(categoryProviders)) {
-            categoryProviders.forEach((provider: any) => {
-              transformedProviders.push({
-                id: provider.id,
-                name: provider.name,
-                description: provider.description,
-                logo: provider.logo,
-                category: categoryKey,
-                capabilities: provider.capabilities || [],
-                setup_complexity: provider.setup_complexity || 'simple',
-                data_types: provider.data_types || []
-              });
-            });
-          }
-        });
-        
-        backendProviders = transformedProviders;
-        console.log('Transformed providers:', backendProviders);
-      } else {
-        console.warn('Failed to fetch providers from backend');
-      }
-
-      // Use backend providers if available, otherwise fallback to hardcoded ones
-      if (backendProviders.length > 0) {
-        setAvailableProviders(backendProviders);
-      } else {
-        // Fallback to hardcoded providers (including Facebook Conversions API)
-      setAvailableProviders([
-        {
-          id: 'facebook_ads',
-          name: 'Facebook Ads',
-          description: 'Connect your Facebook advertising campaigns for comprehensive ad intelligence and performance tracking.',
-          logo: '/logos/facebook.svg',
-          category: 'ad_intelligence',
-          capabilities: ['Campaign Performance', 'Audience Insights', 'Creative Analysis', 'Attribution Tracking'],
-          setup_complexity: 'simple',
-          data_types: ['Impressions', 'Clicks', 'Conversions', 'Spend', 'CTR', 'CPC']
-        },
-          {
-            id: 'facebook_conversions',
-            name: 'Facebook Conversions API',
-            description: 'Enable server-side conversion tracking for enhanced attribution and iOS 14.5+ compliance.',
-            logo: '/logos/facebook-conversions.svg',
-            category: 'ad_intelligence',
-            capabilities: ['Server-side Tracking', 'Enhanced Attribution', 'Privacy Compliance', 'Custom Events'],
-            setup_complexity: 'simple',
-            data_types: ['Conversion Events', 'Custom Events', 'User Data', 'Attribution Data']
-          },
-        {
-          id: 'google_ads',
-          name: 'Google Ads',
-          description: 'Integrate Google Ads for search and display campaign optimization with AI-powered insights.',
-          logo: '/logos/google-ads.svg',
-          category: 'ad_intelligence',
-          capabilities: ['Search Campaigns', 'Display Networks', 'Shopping Ads', 'Performance Max'],
-          setup_complexity: 'simple',
-          data_types: ['Impressions', 'Clicks', 'Conversions', 'Cost', 'Quality Score']
-        },
-        {
-          id: 'hubspot',
-          name: 'HubSpot',
-          description: 'Sync your HubSpot CRM to unlock customer intelligence and behavioral insights.',
-          logo: '/logos/hubspot.svg',
-          category: 'customer_intelligence',
-          capabilities: ['Contact Management', 'Deal Tracking', 'Email Campaigns', 'Lead Scoring'],
-          setup_complexity: 'simple',
-          data_types: ['Contacts', 'Deals', 'Companies', 'Email Engagement']
-        },
-        {
-          id: 'gohighlevel',
-          name: 'GoHighLevel',
-          description: 'Connect your GoHighLevel CRM for comprehensive lead tracking and customer journey analysis.',
-          logo: '/logos/gohighlevel.svg',
-          category: 'customer_intelligence',
-          capabilities: ['Contact Management', 'Lead Tracking', 'Pipeline Management', 'Agency Intelligence'],
-          setup_complexity: 'simple',
-          data_types: ['Contacts', 'Leads', 'Opportunities', 'Locations', 'Campaigns']
-        },
-        {
-          id: 'salesforce',
-          name: 'Salesforce',
-          description: 'Connect Salesforce CRM for enterprise-grade customer intelligence and pipeline analysis.',
-          logo: '/logos/salesforce.svg',
-          category: 'customer_intelligence',
-          capabilities: ['Lead Management', 'Opportunity Tracking', 'Account Management', 'Sales Analytics'],
-          setup_complexity: 'moderate',
-          data_types: ['Leads', 'Opportunities', 'Accounts', 'Activities']
-        },
-        {
-          id: 'google_analytics',
-          name: 'Google Analytics 4',
-          description: 'Integrate GA4 for comprehensive behavioral intelligence and user journey analysis.',
-          logo: '/logos/google-analytics.svg',
-          category: 'behavior_intelligence',
-          capabilities: ['User Behavior', 'Conversion Tracking', 'Audience Insights', 'Custom Events'],
-          setup_complexity: 'simple',
-          data_types: ['Sessions', 'Users', 'Events', 'Conversions', 'Revenue']
-        },
-        {
-          id: 'shopify',
-          name: 'Shopify',
-          description: 'Connect your Shopify store for e-commerce intelligence and customer behavior analysis.',
-          logo: '/logos/shopify.svg',
-          category: 'customer_intelligence',
-          capabilities: ['Order Tracking', 'Customer Profiles', 'Product Analytics', 'Revenue Intelligence'],
-          setup_complexity: 'simple',
-          data_types: ['Orders', 'Customers', 'Products', 'Revenue', 'Inventory']
-        },
-        {
-          id: 'stripe',
-          name: 'Stripe',
-          description: 'Integrate Stripe for payment intelligence and customer lifetime value analysis.',
-          logo: '/logos/stripe.svg',
-          category: 'customer_intelligence',
-          capabilities: ['Payment Processing', 'Subscription Analytics', 'Customer LTV', 'Churn Analysis'],
-          setup_complexity: 'moderate',
-          data_types: ['Payments', 'Subscriptions', 'Customers', 'Revenue', 'Refunds']
-        },
-        {
-          id: 'linkedin_ads',
-          name: 'LinkedIn Ads',
-          description: 'Connect LinkedIn advertising for B2B ad intelligence and professional audience insights.',
-          logo: '/logos/linkedin.svg',
-          category: 'ad_intelligence',
-          capabilities: ['B2B Campaigns', 'Professional Targeting', 'Lead Generation', 'Brand Awareness'],
-          setup_complexity: 'simple',
-          data_types: ['Impressions', 'Clicks', 'Leads', 'Spend', 'Demographics']
-        }
-      ]);
-      }
-
-      setLoading(false);
-      } catch (err) {
-        console.error('Failed to fetch integrations data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load integration data');
-        setLoading(false);
-      }
-    };
-
+  // Initial data fetch
   useEffect(() => {
-    fetchData();
-  }, []);
+    if (!authLoading && user) {
+      fetchData();
+    }
+  }, [user, authLoading]);
 
-  // Periodically refresh sync progress for running syncs
+  // Periodic sync progress updates (simple)
   useEffect(() => {
-    const hasRunningSyncs = Object.values(syncProgress).some(
-      progress => progress.overall_status === 'running'
-    );
-
-    if (hasRunningSyncs) {
-      const interval = setInterval(async () => {
-        try {
-          // Use existing auth token if available, otherwise generate one for current user
-          let token = localStorage.getItem('auth_token');
-          
-          if (!token) {
-            // Get current user info from localStorage
-            const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
-            const userId = currentUser.id;
-            
-            if (!userId) {
-              throw new Error('Please log in to view integrations. No user session found.');
-            }
-            
-            // Generate auth token for progress updates
-            const tokenResponse = await fetch('http://localhost:8000/api/v1/auth/generate-token', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                subject: userId,
-                expires_hours: 24
-              })
-            });
-
-            if (tokenResponse.ok) {
-              const tokenData = await tokenResponse.json();
-              token = tokenData.access_token;
-            }
-          }
-
-          if (token) {
-            await fetchSyncProgress(token);
-          }
-        } catch (error) {
-          console.error('Error refreshing sync progress:', error);
-        }
-      }, 5000); // Refresh every 5 seconds
-
+    if (integrations.length > 0) {
+      // Fetch sync progress once after integrations load
+      fetchSyncProgress();
+      
+      // Set up periodic updates every 30 seconds
+      const interval = setInterval(fetchSyncProgress, 30000);
+      
       return () => clearInterval(interval);
     }
-  }, [syncProgress]);
+  }, [integrations.length]);
 
   // Prevent body scrolling when modal is open
   useEffect(() => {
@@ -391,7 +205,6 @@ const Integrations: React.FC = () => {
       document.body.style.overflow = 'unset';
     }
 
-    // Cleanup function to restore scrolling when component unmounts
     return () => {
       document.body.style.overflow = 'unset';
     };
@@ -413,10 +226,28 @@ const Integrations: React.FC = () => {
     : availableProviders.filter(provider => provider.category === selectedCategory);
 
   const connectedIntegrations = integrations.filter(i => i.status === 'connected');
-  const totalDataPoints = integrations.reduce((sum, i) => sum + (i.data_points_synced || 0), 0);
-  const avgHealthScore = connectedIntegrations.length > 0 
-    ? connectedIntegrations.reduce((sum, i) => sum + (i.health_score || 0), 0) / connectedIntegrations.length 
-    : 0;
+  
+  // Use API data for total data points calculation
+  const totalDataPoints = dataPointsStats?.total_data_points || integrations.reduce((sum, integration) => {
+    const progress = syncProgress[integration.id];
+    if (progress && progress.phases && Array.isArray(progress.phases)) {
+      return sum + progress.phases.reduce((phaseSum, phase) => phaseSum + (phase.processed_items || 0), 0);
+    }
+    return sum + (integration.data_points_synced || 0);
+  }, 0);
+
+  // Simple calculation for last sync date
+  const getLastSyncDate = () => {
+    const integrationsWithSync = connectedIntegrations.filter(i => i.last_sync);
+    if (integrationsWithSync.length === 0) return null;
+    
+    const timestamps = integrationsWithSync.map(i => new Date(i.last_sync!).getTime()).filter(t => !isNaN(t));
+    if (timestamps.length === 0) return null;
+    
+    return new Date(Math.max(...timestamps));
+  };
+
+  const lastSyncDate = getLastSyncDate();
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -472,81 +303,81 @@ const Integrations: React.FC = () => {
       return;
     }
     
-    // Use unified modal for all providers
-      setSelectedProvider(provider);
-      setIntegrationName(`${provider.name} - Main Account`);
-      setIsConnectModalOpen(true);
+    setSelectedProvider(provider);
+    setIsConnectModalOpen(true);
   };
 
   const handleSync = async (integrationId: string) => {
-    // Update integration status to syncing
-    setIntegrations(prev => prev.map(integration =>
-        integration.id === integrationId 
-        ? { ...integration, status: 'syncing' as const }
-          : integration
-      ));
-
-    // Simulate sync process
-    setTimeout(() => {
-      setIntegrations(prev => prev.map(integration =>
-        integration.id === integrationId 
-          ? { 
-              ...integration, 
-              status: 'connected' as const,
-              last_sync: new Date().toISOString(),
-              data_points_synced: (integration.data_points_synced || 0) + Math.floor(Math.random() * 100)
-            }
-          : integration
-      ));
-    }, 2000);
+    console.log('Sync is automated - no manual sync needed');
   };
 
   const handleDisconnect = async (integrationId: string) => {
     if (window.confirm('Are you sure you want to disconnect this integration? This will stop data synchronization.')) {
-      setIntegrations(prev => prev.filter(integration => integration.id !== integrationId));
+      try {
+        await apiClient.deleteIntegration(integrationId);
+        // Remove from local state after successful API call
+        setIntegrations(prev => prev.filter(integration => integration.id !== integrationId));
+        // Refresh data points stats after disconnection
+        await loadDataPointsStats();
+      } catch (error) {
+        console.error('Error disconnecting integration:', error);
+        setError('Failed to disconnect integration. Please try again.');
+      }
     }
   };
 
   const handleCredentialsSuccess = (summary: any) => {
     setIsConnectModalOpen(false);
     setSelectedProvider(null);
-    
-    // Show the comprehensive connection summary
     setConnectionSummary(summary);
     
-    // Refresh integrations list to show the new connection
+    // Refresh data after successful connection
     fetchData();
+    loadDataPointsStats();
   };
 
   const handleFacebookError = (error: string) => {
     console.error('Facebook integration error:', error);
-    // Update Facebook integration status to error
-    setIntegrations(prev => prev.map(integration => 
-      integration.id === 'facebook-ads' 
-        ? { ...integration, status: 'error' as const }
-        : integration
-    ));
   };
 
   const handleGoogleError = (error: string) => {
     console.error('Google integration error:', error);
-    // Update Google integration status to error
-    setIntegrations(prev => prev.map(integration => 
-      integration.id === 'google-ads' 
-        ? { ...integration, status: 'error' as const }
-        : integration
-    ));
   };
 
   const handleGoHighLevelError = (error: string) => {
     console.error('GoHighLevel integration error:', error);
-    // Update GoHighLevel integration status to error
-    setIntegrations(prev => prev.map(integration => 
-      integration.id === 'gohighlevel' 
-        ? { ...integration, status: 'error' as const }
-        : integration
-    ));
   };
+
+  // Show loading state while checking authentication
+  if (authLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show login message if user is not authenticated
+  if (!user) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <AlertCircle className="h-12 w-12 text-yellow-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Authentication Required</h2>
+          <p className="text-gray-600 mb-4">Please log in to view integrations. No user session found.</p>
+          <button
+            onClick={() => window.location.href = '/login'}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700"
+          >
+            Go to Login
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
   return (
@@ -564,33 +395,24 @@ const Integrations: React.FC = () => {
     );
   }
 
-  if (error && !error.includes('Demo Mode')) {
+  // Show error state with retry option
+  if (error && availableProviders.length === 0) {
     return (
-      <div className="bg-red-50 p-6 rounded-xl border border-red-100">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-red-100 rounded-full flex items-center justify-center">
-            <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-        </div>
-          <p className="text-red-700 font-medium">{error}</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (showConnectionTest) {
-    return (
-      <div className="max-w-6xl mx-auto p-6">
-        <div className="mb-6">
-            <button
-            onClick={() => setShowConnectionTest(false)}
-            className="text-blue-600 hover:text-blue-800 mb-4"
+      <div className="flex justify-center items-center h-full">
+        <div className="text-center max-w-md">
+          <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-gray-900 mb-2">Failed to Load Integrations</h2>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchData}
+            className="bg-brand-blue text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
           >
-            ← Back to Integrations
-            </button>
+            Try Again
+          </button>
+          <p className="text-sm text-gray-500 mt-4">
+            If this issue persists, please contact support or check your internet connection.
+          </p>
         </div>
-        <FacebookConnectionTest />
       </div>
     );
   }
@@ -677,23 +499,24 @@ const Integrations: React.FC = () => {
               description="Total data points collected"
               icon={
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4m0 10c0 2.21-3.582 4-8 4s-8-1.79-8-4" />
                 </svg>
               }
             />
             
             <IntelligenceModule
-              title="Health Score"
-              value={`${avgHealthScore.toFixed(0)}%`}
-              trend={{ 
-                direction: avgHealthScore > 90 ? 'up' : avgHealthScore > 70 ? 'neutral' : 'down', 
-                percentage: avgHealthScore, 
-                period: 'average' 
-              }}
-              description="Integration health average"
+              title="Last Sync Status"
+              value={connectedIntegrations.length > 0 ? 
+                (connectedIntegrations.some(i => i.last_sync) ? 'Recent' : 'Pending') : 
+                'No Data'
+              }
+              description={connectedIntegrations.length > 0 && connectedIntegrations.some(i => i.last_sync) ? 
+                `Last: ${lastSyncDate ? lastSyncDate.toLocaleDateString() : 'No data'}` :
+                'No recent sync activity'
+              }
               icon={
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               }
             />
@@ -817,48 +640,57 @@ const Integrations: React.FC = () => {
                     <div className="space-y-3">
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Data Points:</span>
-                        <span className="font-medium">{integration.data_points_synced?.toLocaleString() || 0}</span>
+                        <span className="font-medium">
+                          {(() => {
+                            // Use API data if available for this specific integration
+                            const apiDataForIntegration = dataPointsStats?.breakdown_by_integration?.[integration.id]?.total;
+                            if (apiDataForIntegration !== undefined) {
+                              return apiDataForIntegration.toLocaleString();
+                            }
+                            // Fallback to sync progress or integration data
+                            if (progress && progress.phases && Array.isArray(progress.phases)) {
+                              return progress.phases.reduce((total, phase) => total + (phase.processed_items || 0), 0).toLocaleString();
+                            }
+                            return integration.data_points_synced?.toLocaleString() || 'Unknown';
+                          })()}
+                        </span>
                       </div>
                       <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Health Score:</span>
-                        <span className="font-medium">{integration.health_score || 0}%</span>
+                        <span className="text-gray-500">Connection Status:</span>
+                        <span className="font-medium capitalize">{integration.status}</span>
                       </div>
                       <div className="flex justify-between text-sm">
                         <span className="text-gray-500">Sync Frequency:</span>
-                        <span className="font-medium">{integration.sync_frequency || 'Manual'}</span>
-                      </div>
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Last Sync:</span>
-                        <span className="font-medium">
-                            {integration.last_sync 
-                            ? new Date(integration.last_sync).toLocaleTimeString()
-                            : 'Never'
-                          }
-                        </span>
+                        <span className="font-medium">Manual</span>
                       </div>
                     </div>
                     
                     <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
-                          <button
-                            onClick={() => handleSync(integration.id)}
-                          disabled={integration.status === 'syncing' || (progress && progress.overall_status === 'running')}
-                          className="btn-secondary flex-1 text-sm"
-                          >
-                          {integration.status === 'syncing' || (progress && progress.overall_status === 'running') ? 'Syncing...' : 'Sync Now'}
-                          </button>
-                          <button
-                          onClick={() => handleDisconnect(integration.id)}
-                          className="btn-secondary text-red-600 hover:bg-red-50 text-sm"
-                          >
-                          Disconnect
-                          </button>
-                          </div>
+                      {/* Show last sync info instead of misleading auto-sync message */}
+                      <div className="flex-1 flex items-center justify-center py-2 px-3 bg-gray-50 rounded-lg text-sm text-gray-600">
+                        <div className="flex items-center gap-2">
+                          <Clock className="w-4 h-4" />
+                          <span>
+                            Last sync: {integration.last_sync 
+                              ? new Date(integration.last_sync).toLocaleString()
+                              : 'Never'
+                            }
+                          </span>
                         </div>
-                      );
-                    })}
+                      </div>
+                      <button
+                        onClick={() => handleDisconnect(integration.id)}
+                        className="btn-secondary text-red-600 hover:bg-red-50 text-sm"
+                      >
+                        Disconnect
+                      </button>
                     </div>
-              </div>
-            )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          )}
 
           {/* Available Platforms */}
           <div className="intelligence-card mb-8">
@@ -871,86 +703,107 @@ const Integrations: React.FC = () => {
               </h3>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filteredProviders.map((provider) => {
-                const isConnected = integrations.some(i => i.provider === provider.id);
-                
-                return (
-                  <div key={provider.id} className="p-6 border border-gray-200 rounded-xl hover:border-brand-blue transition-colors">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
-                          <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                          </svg>
+            {filteredProviders.length === 0 ? (
+              <div className="text-center py-12">
+                <svg className="w-12 h-12 text-gray-400 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Platforms Available</h3>
+                <p className="text-gray-600 mb-4">
+                  {selectedCategory === 'all' 
+                    ? 'No integration platforms are currently available from the backend.'
+                    : `No platforms available in the ${categories.find(c => c.id === selectedCategory)?.name} category.`
+                  }
+                </p>
+                <button
+                  onClick={fetchData}
+                  className="bg-brand-blue text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                >
+                  Retry Loading
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {filteredProviders.map((provider) => {
+                  const isConnected = integrations.some(i => i.provider === provider.id);
+                  
+                  return (
+                    <div key={provider.id} className="p-6 border border-gray-200 rounded-xl hover:border-brand-blue transition-colors">
+                      <div className="flex items-start justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 bg-gray-100 rounded-xl flex items-center justify-center">
+                            <svg className="w-6 h-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                          </div>
+                          <div>
+                          <h4 className="font-semibold text-gray-900">{provider.name}</h4>
+                          <span className={`px-2 py-1 text-xs rounded-full ${getComplexityColor(provider.setup_complexity)}`}>
+                            {provider.setup_complexity} setup
+                          </span>
+                          </div>
                         </div>
+                      </div>
+                    
+                      <p className="text-sm text-gray-600 mb-4">{provider.description}</p>
+                      
+                      <div className="space-y-3 mb-4">
                         <div>
-                        <h4 className="font-semibold text-gray-900">{provider.name}</h4>
-                        <span className={`px-2 py-1 text-xs rounded-full ${getComplexityColor(provider.setup_complexity)}`}>
-                          {provider.setup_complexity} setup
-                        </span>
+                          <h5 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Capabilities</h5>
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(provider.capabilities) && provider.capabilities.slice(0, 3).map((capability, index) => (
+                              <span key={index} className="px-2 py-1 bg-gray-100 text-xs rounded">
+                                {capability}
+                              </span>
+                            ))}
+                            {Array.isArray(provider.capabilities) && provider.capabilities.length > 3 && (
+                              <span className="px-2 py-1 bg-gray-100 text-xs rounded">
+                                +{provider.capabilities.length - 3} more
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        
+                        <div>
+                          <h5 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Data Types</h5>
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(provider.data_types) && provider.data_types.slice(0, 3).map((dataType, index) => (
+                              <span key={index} className="px-2 py-1 bg-brand-ice text-xs rounded">
+                                {dataType}
+                              </span>
+                            ))}
+                            {Array.isArray(provider.data_types) && provider.data_types.length > 3 && (
+                              <span className="px-2 py-1 bg-brand-ice text-xs rounded">
+                                +{provider.data_types.length - 3} more
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  
-                    <p className="text-sm text-gray-600 mb-4">{provider.description}</p>
                     
-                    <div className="space-y-3 mb-4">
-                      <div>
-                        <h5 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Capabilities</h5>
-                        <div className="flex flex-wrap gap-1">
-                          {provider.capabilities.slice(0, 3).map((capability, index) => (
-                            <span key={index} className="px-2 py-1 bg-gray-100 text-xs rounded">
-                              {capability}
-                            </span>
-                          ))}
-                          {provider.capabilities.length > 3 && (
-                            <span className="px-2 py-1 bg-gray-100 text-xs rounded">
-                              +{provider.capabilities.length - 3} more
-                            </span>
-                          )}
-                        </div>
+                      <button
+                        onClick={() => handleConnect(provider)}
+                        disabled={isConnected}
+                        className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                          isConnected
+                            ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
+                            : provider.id === 'facebook_ads'
+                              ? 'bg-blue-600 text-white hover:bg-blue-700'
+                              : 'border-gray-200 hover:border-brand-blue hover:bg-brand-ice hover:bg-opacity-10'
+                        }`}
+                      >
+                        {isConnected 
+                          ? 'Connected' 
+                          : provider.id === 'facebook_ads' 
+                            ? 'Add Credentials' 
+                            : 'Connect'
+                        }
+                      </button>
                     </div>
-                    
-                      <div>
-                        <h5 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">Data Types</h5>
-                        <div className="flex flex-wrap gap-1">
-                          {provider.data_types.slice(0, 3).map((dataType, index) => (
-                            <span key={index} className="px-2 py-1 bg-brand-ice text-xs rounded">
-                              {dataType}
-                            </span>
-                          ))}
-                          {provider.data_types.length > 3 && (
-                            <span className="px-2 py-1 bg-brand-ice text-xs rounded">
-                              +{provider.data_types.length - 3} more
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  
-                    <button
-                      onClick={() => handleConnect(provider)}
-                      disabled={isConnected}
-                      className={`w-full py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                        isConnected
-                          ? 'border-gray-200 bg-gray-50 cursor-not-allowed'
-                          : provider.id === 'facebook_ads'
-                            ? 'bg-blue-600 text-white hover:bg-blue-700'
-                            : 'border-gray-200 hover:border-brand-blue hover:bg-brand-ice hover:bg-opacity-10'
-                      }`}
-                    >
-                      {isConnected 
-                        ? 'Connected' 
-                        : provider.id === 'facebook_ads' 
-                          ? 'Add Credentials' 
-                          : 'Connect'
-                      }
-                    </button>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -987,7 +840,6 @@ const Integrations: React.FC = () => {
                   onClick={() => {
                     setIsConnectModalOpen(false);
                     setSelectedProvider(null);
-                    setIntegrationName('');
                   }}
                   className="text-gray-400 hover:text-gray-500"
                 >
@@ -1004,7 +856,7 @@ const Integrations: React.FC = () => {
                   <div className="bg-brand-ice bg-opacity-20 p-4 rounded-lg">
                     <h4 className="font-medium text-gray-900 mb-2">What you'll get:</h4>
                     <ul className="space-y-1">
-                      {selectedProvider.capabilities.map((capability, index) => (
+                      {Array.isArray(selectedProvider.capabilities) && selectedProvider.capabilities.map((capability, index) => (
                         <li key={index} className="flex items-center gap-2 text-sm text-gray-600">
                           <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1024,8 +876,8 @@ const Integrations: React.FC = () => {
                         type="text"
                         placeholder={`${selectedProvider.name} - Main Account`}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-brand-blue focus:border-transparent"
-                        value={integrationName}
-                        onChange={(e) => setIntegrationName(e.target.value)}
+                        value={selectedProvider?.name}
+                        readOnly
                       />
                     </div>
         
@@ -1048,45 +900,41 @@ const Integrations: React.FC = () => {
                   <div>
                     {selectedProvider.id === 'facebook_ads' ? (
                       <FacebookCredentialsForm
-                        integrationName={integrationName}
+                        integrationName={selectedProvider.name}
                         onClose={() => {
                           setIsConnectModalOpen(false);
                           setSelectedProvider(null);
-                          setIntegrationName('');
                         }}
                         onSuccess={handleCredentialsSuccess}
                         onError={handleFacebookError}
                       />
                     ) : selectedProvider.id === 'facebook_conversions' ? (
                       <FacebookCredentialsForm
-                        integrationName={integrationName}
+                        integrationName={selectedProvider.name}
                         providerType="facebook_conversions"
                         onClose={() => {
                           setIsConnectModalOpen(false);
                           setSelectedProvider(null);
-                          setIntegrationName('');
                         }}
                         onSuccess={handleCredentialsSuccess}
                         onError={handleFacebookError}
                       />
                     ) : selectedProvider.id === 'google_ads' ? (
                       <GoogleCredentialsForm
-                        integrationName={integrationName}
+                        integrationName={selectedProvider.name}
                         onClose={() => {
                           setIsConnectModalOpen(false);
                           setSelectedProvider(null);
-                          setIntegrationName('');
                         }}
                         onSuccess={handleCredentialsSuccess}
                         onError={handleGoogleError}
                       />
                     ) : selectedProvider.id === 'gohighlevel' ? (
                       <GoHighLevelCredentialsForm
-                        integrationName={integrationName}
+                        integrationName={selectedProvider.name}
                         onClose={() => {
                           setIsConnectModalOpen(false);
                           setSelectedProvider(null);
-                          setIntegrationName('');
                         }}
                         onSuccess={handleCredentialsSuccess}
                         onError={handleGoHighLevelError}
@@ -1099,7 +947,6 @@ const Integrations: React.FC = () => {
                             alert(`Redirecting to ${selectedProvider.name} for authentication...`);
                             setIsConnectModalOpen(false);
                             setSelectedProvider(null);
-                            setIntegrationName('');
                           }}
                           className="btn-primary flex-1"
                         >
@@ -1109,7 +956,6 @@ const Integrations: React.FC = () => {
                           onClick={() => {
                             setIsConnectModalOpen(false);
                             setSelectedProvider(null);
-                            setIntegrationName('');
                           }}
                           className="btn-secondary"
                         >

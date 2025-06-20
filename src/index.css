@@ -266,6 +266,55 @@ body {
     @apply text-base; /* Prevents zoom on iOS */
   }
   
+  /* Dashboard sync button styles */
+  .sync-button {
+    @apply flex items-center space-x-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-200;
+  }
+  
+  .sync-button-primary {
+    @apply bg-brand-blue text-white hover:bg-brand-indigo;
+  }
+  
+  .sync-button-secondary {
+    @apply bg-gray-100 text-gray-700 hover:bg-gray-200;
+  }
+  
+  .sync-button-disabled {
+    @apply opacity-75 cursor-not-allowed;
+  }
+  
+  .sync-button-success {
+    @apply bg-green-100 text-green-700 border border-green-200;
+  }
+  
+  .sync-button-warning {
+    @apply bg-yellow-100 text-yellow-700 border border-yellow-200;
+  }
+  
+  /* Header sync notification styles */
+  .sync-notification {
+    @apply flex items-center space-x-2 px-3 py-1 rounded-lg text-sm;
+  }
+  
+  .sync-notification-success {
+    @apply bg-green-50 border border-green-200 text-green-700;
+  }
+  
+  .sync-notification-error {
+    @apply bg-yellow-50 border border-yellow-200 text-yellow-700;
+  }
+  
+  /* Mobile responsive sync button */
+  @media (max-width: 640px) {
+    .sync-button {
+      @apply px-3 py-2;
+    }
+    
+    .sync-notification {
+      @apply hidden; /* Hide notifications on mobile to save space */
+    }
+  }
+  
   /* Safe area handling for mobile devices */
   .safe-area-top {
     padding-top: env(safe-area-inset-top);

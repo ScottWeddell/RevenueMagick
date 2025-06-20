@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { TrendingUp, TrendingDown, Minus, Target, Users, DollarSign, MousePointer, Eye, BarChart3, Brain, Lightbulb, Zap, AlertTriangle } from 'lucide-react';
+import { Link } from 'react-router-dom';
+import { TrendingUp, TrendingDown, Minus, Target, Users, DollarSign, MousePointer, Eye, BarChart3, Brain, Lightbulb, Zap, AlertTriangle, MessageSquare, ArrowRight, Calendar, Filter, Download, ExternalLink } from 'lucide-react';
 import IntelligenceModule from '../components/IntelligenceModule';
 import StructuralTension from '../components/StructuralTension';
 import ReadinessScore from '../components/ReadinessScore';
 import NeuromindProfileBadge from '../components/NeuromindProfileBadge';
-import { useUser } from '../contexts/UserContext';
+import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../lib/api';
 
 // Types for the dashboard data
@@ -87,221 +88,299 @@ interface StrategicInsights {
 }
 
 const Dashboard: React.FC = () => {
-  const { currentUser } = useUser();
+  const { user } = useAuth();
+  const [userInfo, setUserInfo] = useState<any>(null);
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [strategicInsights, setStrategicInsights] = useState<StrategicInsights | null>(null);
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
+  const [strategicInsights, setStrategicInsights] = useState<StrategicInsights | null>(null);
   const [showInsightsModal, setShowInsightsModal] = useState(false);
 
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      setIsLoading(true);
-      setError(null);
-      
-      try {
-        console.log(`Fetching dashboard data for business: ${currentUser?.business_id}`);
-        const data = await apiClient.getDashboardData(30);
-        setDashboardData(data);
-        setError(null);
-      } catch (err) {
-        console.error('Failed to fetch dashboard data:', err);
-        setError(err instanceof Error ? err.message : 'Failed to load dashboard data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
+    fetchUserInfo();
     fetchDashboardData();
-  }, [currentUser?.business_id]);
+  }, []);
+
+  const fetchUserInfo = async () => {
+    try {
+      const response = await apiClient.getCurrentUser();
+      setUserInfo(response.user);
+    } catch (error) {
+      console.error('Failed to fetch user info:', error);
+      setError('Failed to load user information');
+    }
+  };
+
+  const fetchDashboardData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await apiClient.getDashboardData(30);
+      
+      // Validate the data structure before setting it
+      if (data && typeof data === 'object' && 'structural_tension' in data) {
+        setDashboardData(data as DashboardData);
+        
+        // Remove automatic profile generation - let users do it manually
+        // This prevents infinite loops and gives users control
+        
+        // Don't automatically generate strategic insights - only when user clicks button
+      } else {
+        throw new Error('Invalid dashboard data structure received');
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch dashboard data:', error);
+      setError(error.message || 'Failed to load dashboard data');
+      // Don't clear dashboardData on error - keep showing old data
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const generateNeuromindProfiles = async () => {
+    try {
+      console.log('🧠 Generating Neuromind Profiles...');
+      const response = await apiClient.generateNeuromindProfiles();
+      
+      if (response) {
+        console.log('✅ Neuromind Profiles generated:', response);
+        
+        // Show success message to user instead of auto-refreshing
+        if (response.profiles_generated && response.profiles_generated > 0) {
+          // User can manually refresh if they want to see the profiles immediately
+          console.log(`✅ Successfully generated ${response.profiles_generated} Neuromind Profiles. Refresh the page to see them.`);
+        }
+      } else {
+        console.warn('⚠️ Failed to generate Neuromind Profiles');
+      }
+    } catch (error) {
+      console.error('❌ Error generating Neuromind Profiles:', error);
+    }
+  };
 
   const generateStrategicInsights = async () => {
-    if (!dashboardData) return;
-    
     setIsGeneratingInsights(true);
-    
     try {
-      // Prepare analysis data from current dashboard metrics
-      const analysisData = {
-        business_context: {
-          industry: 'E-commerce', // Could be made dynamic
-          business_model: 'B2C',
-          monthly_revenue: dashboardData.structural_tension.current_revenue,
-          goals: {
-            revenue: dashboardData.structural_tension.goal_revenue,
-            conversion_rate: dashboardData.structural_tension.goal_cvr,
-            aov: dashboardData.structural_tension.goal_aov
-          }
-        },
-        performance_data: {
-          conversion_rate: dashboardData.metric_intelligence.cvr,
-          average_order_value: dashboardData.metric_intelligence.aov,
-          roas: dashboardData.metric_intelligence.roas,
-          mer: dashboardData.metric_intelligence.mer,
-          total_users: dashboardData.customer_intelligence.total_users,
-          average_readiness_score: dashboardData.customer_intelligence.average_readiness_score,
-          high_readiness_users: dashboardData.customer_intelligence.high_readiness_users,
-          churn_risk: dashboardData.customer_intelligence.churn_risk,
-          ad_spend: dashboardData.ad_intelligence.ad_spend,
-          ctr: dashboardData.ad_intelligence.ctr,
-          avg_session_duration: dashboardData.behavior_intelligence.avg_session_duration,
-          bounce_rate: dashboardData.behavior_intelligence.bounce_rate,
-          friction_points: dashboardData.behavior_intelligence.friction_points,
-          market_sentiment: dashboardData.market_intelligence.market_sentiment,
-          message_resonance: dashboardData.copy_intelligence.message_resonance
-        },
-        neuromind_distribution: dashboardData.neuromind_profiles,
-        focus_areas: ['conversion_optimization', 'revenue_growth', 'user_experience'],
-        timeframe: '30_days'
-      };
-
-      console.log('Generating strategic insights with real LLM service...');
+      console.log('🧠 Generating strategic insights...');
       
-      // Try to get real strategic recommendations from the API
+      // First, try to get existing saved insights
+      let insights;
       try {
-        const insights = await apiClient.getStrategicRecommendations({ limit: 5 });
+        insights = await apiClient.getStrategicRecommendations();
+        console.log('✅ Existing strategic insights found:', insights);
         
-        if (insights && insights.recommendations && insights.recommendations.length > 0) {
-          // Transform API response to match our interface
-          const transformedInsights: StrategicInsights = {
-            recommendations: insights.recommendations.map((rec: any) => ({
+        // If we have saved insights, use them
+        if ((insights as any).recommendations && Array.isArray((insights as any).recommendations) && (insights as any).recommendations.length > 0) {
+          const processedInsights: StrategicInsights = {
+            recommendations: (insights as any).recommendations.map((rec: any) => ({
               type: rec.category || rec.type || 'optimization',
               priority: rec.priority || 'medium',
               title: rec.title || 'Strategic Recommendation',
               description: rec.description || 'No description available',
-              action_items: Array.isArray(rec.action_steps) ? rec.action_steps : 
-                           Array.isArray(rec.action_items) ? rec.action_items : [],
-              expected_impact: rec.expected_impact || `${(rec.expected_revenue_lift * 100).toFixed(0)}% revenue lift` || 'Positive impact expected'
+              action_items: rec.action_items || rec.action_steps || [],
+              expected_impact: rec.expected_impact || 'Impact assessment pending'
             })),
-            analysis_timestamp: new Date().toISOString(),
-            confidence_score: 0.8, // Default confidence for API recommendations
-            total_recommendations: insights.total || insights.recommendations.length
+            analysis_timestamp: (insights as any).last_generated || new Date().toISOString(),
+            confidence_score: (insights as any).recommendations[0]?.confidence_level || 0.85,
+            total_recommendations: (insights as any).recommendations.length
           };
           
-          setStrategicInsights(transformedInsights);
+          setStrategicInsights(processedInsights);
           setShowInsightsModal(true);
+          console.log('📊 Using saved insights:', processedInsights);
           return;
         }
-      } catch (apiError) {
-        console.warn('Strategic recommendations API failed, trying alternative approach:', apiError);
+      } catch (error) {
+        console.log('💡 No saved insights found, generating new ones...');
       }
       
-      // If strategic recommendations API fails, try the strategy recommendations endpoint
+      // Generate new insights using the persistence endpoint
       try {
-        const strategyInsights = await apiClient.generateStrategyRecommendations(analysisData);
+        const response = await fetch('/api/v1/analytics/generate-strategic-insights', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${localStorage.getItem('access_token')}`
+          }
+        });
         
-        if (strategyInsights && strategyInsights.recommendations && strategyInsights.recommendations.length > 0) {
-          const transformedInsights: StrategicInsights = {
-            recommendations: strategyInsights.recommendations.map((rec: any) => ({
-              type: rec.type || 'optimization',
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        const newInsights = await response.json();
+        console.log('✅ New strategic insights generated:', newInsights);
+        
+        if (newInsights.recommendations && Array.isArray(newInsights.recommendations) && newInsights.recommendations.length > 0) {
+          const processedInsights: StrategicInsights = {
+            recommendations: newInsights.recommendations.map((rec: any) => ({
+              type: rec.category || rec.type || 'optimization',
               priority: rec.priority || 'medium',
               title: rec.title || 'Strategic Recommendation',
               description: rec.description || 'No description available',
-              action_items: Array.isArray(rec.action_items) ? rec.action_items : [],
-              expected_impact: rec.expected_impact || 'Positive impact expected'
+              action_items: rec.action_items || rec.action_steps || [],
+              expected_impact: rec.expected_impact || 'Impact assessment pending'
             })),
-            analysis_timestamp: strategyInsights.analysis_timestamp || new Date().toISOString(),
-            confidence_score: strategyInsights.confidence_score || 0.8,
-            total_recommendations: strategyInsights.total_recommendations || strategyInsights.recommendations.length
+            analysis_timestamp: newInsights.generated_at || new Date().toISOString(),
+            confidence_score: newInsights.recommendations[0]?.confidence_level || 0.85,
+            total_recommendations: newInsights.recommendations.length
           };
           
-          setStrategicInsights(transformedInsights);
+          setStrategicInsights(processedInsights);
           setShowInsightsModal(true);
+          console.log('🎯 Processed new insights:', processedInsights);
+          return;
+        } else {
+          // No insights generated - show appropriate message
+          console.log('💡 No strategic insights were generated');
+          alert('Strategic insights could not be generated at this time. Please try again later.');
           return;
         }
-      } catch (strategyError) {
-        console.warn('Strategy recommendations API also failed:', strategyError);
+      } catch (generateError) {
+        console.warn('⚠️ Generate endpoint failed:', generateError);
+        
+        // Try fallback to analytics endpoint for saved insights only
+        try {
+          insights = await apiClient.getStrategicRecommendations();
+          console.log('✅ Checking for saved insights:', insights);
+          
+          if ((insights as any).recommendations && Array.isArray((insights as any).recommendations) && (insights as any).recommendations.length > 0) {
+            const processedInsights: StrategicInsights = {
+              recommendations: (insights as any).recommendations.map((rec: any) => ({
+                type: rec.category || rec.type || 'optimization',
+                priority: rec.priority || 'medium',
+                title: rec.title || 'Strategic Recommendation',
+                description: rec.description || 'No description available',
+                action_items: rec.action_items || rec.action_steps || [],
+                expected_impact: rec.expected_impact || 'Impact assessment pending'
+              })),
+              analysis_timestamp: (insights as any).last_generated || new Date().toISOString(),
+              confidence_score: (insights as any).confidence_level || 0.85,
+              total_recommendations: (insights as any).recommendations.length
+            };
+            
+            setStrategicInsights(processedInsights);
+            setShowInsightsModal(true);
+            console.log('📊 Using saved insights:', processedInsights);
+            return;
+          } else {
+            // No saved insights either
+            console.log('💡 No strategic insights available');
+            alert('Strategic insights are temporarily unavailable. Please try again later.');
+            return;
+          }
+        } catch (fallbackError) {
+          console.error('❌ All endpoints failed:', fallbackError);
+          alert('Strategic insights service is currently unavailable. Please try again later.');
+          return;
+        }
       }
       
-      // Only use fallback if both API calls fail
-      console.log('Using fallback insights due to API unavailability');
-      
-      const fallbackInsights: StrategicInsights = {
-        recommendations: [
-          {
-            type: 'conversion_optimization',
-            priority: 'high',
-            title: 'Optimize High-Readiness User Journey',
-            description: `${dashboardData.customer_intelligence.high_readiness_users} users show high readiness scores but haven't converted. This represents immediate revenue opportunity.`,
-            action_items: [
-              'Implement urgency-based CTAs for Fast-Mover profiles',
-              'Add detailed product comparisons for Proof-Driven users',
-              'Create social proof elements for Skeptic profiles',
-              'Optimize mobile checkout flow'
-            ],
-            expected_impact: `Potential revenue increase of $${Math.round(dashboardData.customer_intelligence.high_readiness_users * dashboardData.metric_intelligence.aov * 0.15).toLocaleString()}/month`
-          },
-          {
-            type: 'behavioral_optimization',
-            priority: 'medium',
-            title: 'Reduce Friction Points',
-            description: `${dashboardData.behavior_intelligence.friction_points} friction points detected in user journey. Reducing these can improve conversion rates.`,
-            action_items: [
-              'Simplify form fields on checkout page',
-              'Add progress indicators to multi-step processes',
-              'Implement exit-intent popups with value propositions',
-              'Optimize page load speeds'
-            ],
-            expected_impact: 'Estimated 8-15% improvement in conversion rate'
-          },
-          {
-            type: 'personalization',
-            priority: 'high',
-            title: 'Neuromind Profile-Based Personalization',
-            description: 'Leverage your Neuromind Profile™ distribution to create targeted experiences for each psychological profile.',
-            action_items: [
-              'Create profile-specific landing pages',
-              'Implement dynamic content based on user behavior',
-              'Personalize email campaigns by profile type',
-              'A/B test messaging for each profile'
-            ],
-            expected_impact: 'Projected 20-35% increase in engagement and conversion'
-          }
-        ],
-        analysis_timestamp: new Date().toISOString(),
-        confidence_score: 0.75, // Lower confidence for fallback data
-        total_recommendations: 3
-      };
-      
-      setStrategicInsights(fallbackInsights);
-      setShowInsightsModal(true);
-    } catch (error) {
-      console.error('Failed to generate strategic insights:', error);
-      alert('Failed to generate strategic insights. Please try again.');
+    } catch (error: any) {
+      console.error('❌ Failed to generate strategic insights:', error);
+      alert('An error occurred while generating strategic insights. Please try again later.');
     } finally {
       setIsGeneratingInsights(false);
     }
   };
 
-  if (isLoading) {
+  // Early return for loading state
+  if (loading) {
     return (
-      <div className="flex justify-center items-center h-full">
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4">
-            <svg className="w-12 h-12 text-brand-blue animate-spin" fill="none" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-            </svg>
-          </div>
-          <p className="mt-4 text-gray-600">Loading Revenue Superintelligence...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading dashboard data...</p>
         </div>
       </div>
     );
   }
 
-  if (!dashboardData) return null;
+  // Early return for error state
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <div className="text-red-600 mb-4">
+            <svg className="w-12 h-12 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+            </svg>
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">Dashboard Error</h3>
+          <p className="text-gray-600 mb-4">{error}</p>
+          <button
+            onClick={fetchDashboardData}
+            className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const { 
-    metric_intelligence, 
-    customer_intelligence, 
-    ad_intelligence, 
-    behavior_intelligence, 
-    market_intelligence, 
-    copy_intelligence, 
-    neuromind_profiles, 
-    structural_tension 
-  } = dashboardData;
+  // Early return if no data
+  if (!dashboardData) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-gray-600">No dashboard data available</p>
+          <button
+            onClick={fetchDashboardData}
+            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"
+          >
+            Load Data
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Destructure data safely after null check with fallback defaults
+  const {
+    structural_tension = {
+      current_revenue: 0,
+      goal_revenue: 0,
+      current_cvr: 0,
+      goal_cvr: 0,
+      current_aov: 0,
+      goal_aov: 0
+    },
+    metric_intelligence = {
+      cvr: 0,
+      aov: 0,
+      roas: 0,
+      mer: 0
+    },
+    customer_intelligence = {
+      total_users: 0,
+      average_readiness_score: 0,
+      high_readiness_users: 0,
+      churn_risk: 0
+    },
+    copy_intelligence = {
+      message_resonance: 0,
+      friction_analysis: 0
+    },
+    ad_intelligence = {
+      ad_spend: 0,
+      impressions: 0,
+      clicks: 0,
+      conversions: 0,
+      ctr: 0
+    },
+    behavior_intelligence = {
+      avg_session_duration: 0,
+      bounce_rate: 0,
+      friction_points: 0
+    },
+    market_intelligence = {
+      market_sentiment: 0,
+      competitor_price_diff: 0
+    },
+    neuromind_profiles = []
+  } = dashboardData || {};
 
   return (
     <div className="space-y-8">
@@ -341,10 +420,13 @@ const Dashboard: React.FC = () => {
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Analyzing...
+                Generating...
               </>
             ) : (
-              'Generate Strategic Insights'
+              <>
+                <Brain className="w-4 h-4 mr-2" />
+                Generate Strategic Insights
+              </>
             )}
           </button>
         </div>
@@ -352,9 +434,9 @@ const Dashboard: React.FC = () => {
 
       {/* Strategic Insights Modal */}
       {showInsightsModal && strategicInsights && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-6 border-b border-gray-200">
+        <div className="fixed inset-0 bg-black bg-opacity-50 z-[9999] flex items-center justify-center p-4">
+          <div className="bg-white rounded-xl max-w-4xl w-full max-h-[85vh] overflow-y-auto shadow-2xl relative" style={{ marginLeft: '8rem' }}>
+            <div className="p-6 border-b border-gray-200 sticky top-0 bg-white z-10 rounded-t-xl">
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-2xl font-bold text-gray-900">Strategic Insights & Recommendations</h2>
@@ -367,7 +449,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <button
                   onClick={() => setShowInsightsModal(false)}
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 transition-colors"
                 >
                   <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -378,7 +460,7 @@ const Dashboard: React.FC = () => {
             
             <div className="p-6 space-y-6">
               {strategicInsights.recommendations.map((rec, index) => (
-                <div key={index} className="border border-gray-200 rounded-lg p-6">
+                <div key={index} className="border border-gray-200 rounded-lg p-6 bg-gray-50">
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="text-lg font-semibold text-gray-900">{rec.title}</h3>
@@ -640,7 +722,7 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
-                {/* Neuromind Profile Distribution */}
+      {/* Neuromind Profile Distribution */}
       <div className="intelligence-card">
         <div className="intelligence-card-header">
           <h3 className="intelligence-title">
@@ -650,19 +732,41 @@ const Dashboard: React.FC = () => {
             Neuromind Profile™ Distribution
           </h3>
         </div>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {neuromind_profiles.map((profile, index) => (
-            <div key={profile.type} className="text-center">
-              <NeuromindProfileBadge 
-                profileType={profile.type as any} 
-                size="lg" 
-                className="mb-2"
-              />
-              <div className="text-2xl font-bold text-brand-blue">{profile.count}</div>
-              <div className="text-sm text-gray-500">users</div>
+        
+        {neuromind_profiles.length > 0 ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {neuromind_profiles.map((profile, index) => (
+              <div key={profile.type} className="text-center">
+                <NeuromindProfileBadge 
+                  profileType={profile.type as any} 
+                  size="lg" 
+                  className="mb-2"
+                />
+                <div className="text-2xl font-bold text-brand-blue">{profile.count}</div>
+                <div className="text-sm text-gray-500">users</div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8">
+            <div className="mb-4">
+              <svg className="w-16 h-16 text-gray-300 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+              </svg>
             </div>
-          ))}
-        </div>
+            <h4 className="text-lg font-medium text-gray-900 mb-2">No Neuromind Profiles™ Yet</h4>
+            <p className="text-gray-600 mb-4">
+              Generate psychological profiles for your users based on their behavioral patterns
+            </p>
+            <button
+              onClick={generateNeuromindProfiles}
+              className="btn-primary"
+            >
+              <Brain className="w-4 h-4 mr-2" />
+              Generate Neuromind Profiles™
+            </button>
+          </div>
+        )}
       </div>
 
       {/* AI Insights */}
@@ -676,28 +780,101 @@ const Dashboard: React.FC = () => {
           </h3>
         </div>
         <div className="space-y-4">
-          <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
-              <div>
-                <h4 className="font-medium text-blue-900">High-Impact Opportunity Detected</h4>
-                <p className="text-blue-700 text-sm mt-1">
-                  {customer_intelligence.high_readiness_users} users show high readiness scores but haven't converted. Consider implementing urgency-based CTAs for Fast-Mover profiles and detailed product comparisons for Proof-Driven users.
-                </p>
+          {strategicInsights && strategicInsights.recommendations.length > 0 ? (
+            // Show generated insights
+            strategicInsights.recommendations.slice(0, 3).map((rec, index) => (
+              <div key={index} className={`p-4 rounded-lg border ${
+                rec.priority === 'high' ? 'bg-red-50 border-red-100' :
+                rec.priority === 'medium' ? 'bg-yellow-50 border-yellow-100' :
+                'bg-green-50 border-green-100'
+              }`}>
+                <div className="flex items-start gap-3">
+                  <div className={`w-2 h-2 rounded-full mt-2 ${
+                    rec.priority === 'high' ? 'bg-red-500' :
+                    rec.priority === 'medium' ? 'bg-yellow-500' :
+                    'bg-green-500'
+                  }`}></div>
+                  <div>
+                    <h4 className={`font-medium ${
+                      rec.priority === 'high' ? 'text-red-900' :
+                      rec.priority === 'medium' ? 'text-yellow-900' :
+                      'text-green-900'
+                    }`}>
+                      {rec.title}
+                    </h4>
+                    <p className={`text-sm mt-1 ${
+                      rec.priority === 'high' ? 'text-red-700' :
+                      rec.priority === 'medium' ? 'text-yellow-700' :
+                      'text-green-700'
+                    }`}>
+                      {rec.description}
+                    </p>
+                    {rec.expected_impact && (
+                      <div className="mt-2">
+                        <span className="text-xs font-medium text-gray-600">Expected Impact: </span>
+                        <span className="text-xs text-gray-800">{rec.expected_impact}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
-          <div className="p-4 bg-green-50 rounded-lg border border-green-100">
-            <div className="flex items-start gap-3">
-              <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
-              <div>
-                <h4 className="font-medium text-green-900">Conversion Optimization Success</h4>
-                <p className="text-green-700 text-sm mt-1">
-                  Your recent A/B test on social proof elements increased conversion rate by 15.2% among Skeptic profiles. Consider expanding this approach to other profile types.
-                </p>
+            ))
+          ) : (
+            // Show default insights when no strategic insights are generated
+            <>
+              <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full mt-2"></div>
+                  <div>
+                    <h4 className="font-medium text-blue-900">High-Impact Opportunity Detected</h4>
+                    <p className="text-blue-700 text-sm mt-1">
+                      {customer_intelligence.high_readiness_users} users show high readiness scores but haven't converted. Consider implementing urgency-based CTAs for Fast-Mover profiles and detailed product comparisons for Proof-Driven users.
+                    </p>
+                  </div>
+                </div>
               </div>
+              <div className="p-4 bg-green-50 rounded-lg border border-green-100">
+                <div className="flex items-start gap-3">
+                  <div className="w-2 h-2 bg-green-500 rounded-full mt-2"></div>
+                  <div>
+                    <h4 className="font-medium text-green-900">Conversion Optimization Success</h4>
+                    <p className="text-green-700 text-sm mt-1">
+                      Your recent A/B test on social proof elements increased conversion rate by 15.2% among Skeptic profiles. Consider expanding this approach to other profile types.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+          
+          {/* Call to action to generate insights if none exist */}
+          {!strategicInsights && (
+            <div className="p-4 bg-gray-50 rounded-lg border border-gray-200 text-center">
+              <p className="text-gray-600 text-sm mb-3">
+                Generate AI-powered strategic insights based on your current performance data
+              </p>
+              <button
+                onClick={generateStrategicInsights}
+                disabled={isGeneratingInsights}
+                className="btn-primary text-sm"
+              >
+                {isGeneratingInsights ? (
+                  <>
+                    <svg className="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <Brain className="w-4 h-4 mr-2" />
+                    Generate Strategic Insights
+                  </>
+                )}
+              </button>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

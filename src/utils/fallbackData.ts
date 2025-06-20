@@ -745,66 +745,7 @@ export const fallbackConversionSpyEngine = {
 
 export const fallbackIntegrations = {
   integrations: [
-    {
-      id: '1',
-      user_id: 'user1',
-      business_id: 'biz1',
-      integration_type: 'ad_intelligence',
-      provider: 'facebook_ads',
-      name: 'Facebook Ads - Main Account',
-      status: 'connected' as const,
-      created_at: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-      last_sync: new Date(Date.now() - 300000).toISOString(),
-      sync_frequency: 'Every 5 minutes',
-      data_points_synced: 12847,
-      health_score: 98
-    },
-    {
-      id: '2',
-      user_id: 'user1',
-      business_id: 'biz1',
-      integration_type: 'ad_intelligence',
-      provider: 'google_ads',
-      name: 'Google Ads - Performance Max',
-      status: 'connected' as const,
-      created_at: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-      last_sync: new Date(Date.now() - 600000).toISOString(),
-      sync_frequency: 'Every 10 minutes',
-      data_points_synced: 8934,
-      health_score: 95
-    },
-    {
-      id: '3',
-      user_id: 'user1',
-      business_id: 'biz1',
-      integration_type: 'customer_intelligence',
-      provider: 'hubspot',
-      name: 'HubSpot CRM',
-      status: 'connected' as const,
-      created_at: new Date(Date.now() - 21 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-      last_sync: new Date(Date.now() - 180000).toISOString(),
-      sync_frequency: 'Every 3 minutes',
-      data_points_synced: 5672,
-      health_score: 92
-    },
-    {
-      id: '4',
-      user_id: 'user1',
-      business_id: 'biz1',
-      integration_type: 'behavior_intelligence',
-      provider: 'google_analytics',
-      name: 'Google Analytics 4',
-      status: 'error' as const,
-      created_at: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString(),
-      updated_at: new Date().toISOString(),
-      last_sync: new Date(Date.now() - 3600000).toISOString(),
-      sync_frequency: 'Every hour',
-      data_points_synced: 0,
-      health_score: 0
-    }
+    // Empty array - only show real integrations that have been connected, tested, and saved
   ],
   availableProviders: [
     {
@@ -846,6 +787,16 @@ export const fallbackIntegrations = {
       capabilities: ['Lead Management', 'Opportunity Tracking', 'Account Management', 'Sales Analytics'],
       setup_complexity: 'moderate' as const,
       data_types: ['Leads', 'Opportunities', 'Accounts', 'Activities']
+    },
+    {
+      id: 'gohighlevel',
+      name: 'GoHighLevel',
+      description: 'Connect your GoHighLevel CRM for comprehensive pipeline management and automation insights.',
+      logo: '/logos/gohighlevel.svg',
+      category: 'customer_intelligence',
+      capabilities: ['Contact Management', 'Pipeline Tracking', 'Automation Workflows', 'SMS/Email Campaigns'],
+      setup_complexity: 'simple' as const,
+      data_types: ['Contacts', 'Opportunities', 'Workflows', 'Communications']
     }
   ]
 };
@@ -967,7 +918,9 @@ export const fallbackDevMonitoring = {
 
 // Helper function to check if we're in production/deployed environment
 export const isProduction = () => {
-  return window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
+  // Temporarily disabled to allow testing with real API data
+  return false;
+  // return window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1';
 };
 
 // Helper function to get fallback data when API fails

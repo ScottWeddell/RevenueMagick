@@ -5,7 +5,13 @@
  * Lightweight (<50KB) asynchronous tracking library
  * Tracks 27+ behavioral signals for Neuromind Profile™ classification
  * 
- * @version 1.0.0
+ * Enhanced with Milestone 4 MVP features:
+ * - Real-time event enrichment
+ * - Data sanitization and anonymization
+ * - Automated event posting to FB and GA
+ * - CRM data integration for attribution
+ * 
+ * @version 1.1.0
  * @author Revenue Magick
  */
 
@@ -21,7 +27,14 @@
         scrollThreshold: 0.25, // 25% scroll to trigger engagement
         hoverThreshold: 1000, // 1 second hover to be significant
         maxRetries: 3,
-        retryDelay: 1000
+        retryDelay: 1000,
+        // Milestone 4 MVP: Enhanced processing options
+        useEnhancedProcessing: true,
+        autoPostConversions: true,
+        sanitizePII: true,
+        enableServerSidePosting: false,
+        platforms: ['facebook', 'google'],
+        testMode: false
     };
 
     // Global state
@@ -40,6 +53,10 @@
     let backButtonClicks = 0;
     let mouseMovements = [];
     let clickCadence = [];
+
+    // Milestone 4 MVP: Enhanced event processing state
+    let crmAttributionData = null;
+    let processingStatus = 'unknown';
 
     // Utility functions
     function generateId() {
@@ -75,6 +92,36 @@
         };
     }
 
+    // Milestone 4 MVP: Data sanitization helper
+    function sanitizeEventData(eventData) {
+        if (!CONFIG.sanitizePII) return eventData;
+        
+        const sanitized = { ...eventData };
+        
+        // Remove or hash potential PII from metadata
+        if (sanitized.metadata) {
+            const metadata = { ...sanitized.metadata };
+            
+            // Remove email patterns
+            Object.keys(metadata).forEach(key => {
+                if (typeof metadata[key] === 'string') {
+                    // Basic email pattern detection
+                    if (metadata[key].includes('@') && metadata[key].includes('.')) {
+                        metadata[key] = '[EMAIL_SANITIZED]';
+                    }
+                    // Basic phone pattern detection
+                    if (/\d{3}[-.\s]?\d{3}[-.\s]?\d{4}/.test(metadata[key])) {
+                        metadata[key] = '[PHONE_SANITIZED]';
+                    }
+                }
+            });
+            
+            sanitized.metadata = metadata;
+        }
+        
+        return sanitized;
+    }
+
     // Session management
     function initializeSession() {
         // Try to get existing session from localStorage
@@ -85,6 +132,8 @@
             const timeSinceLastActivity = Date.now() - parseInt(lastActivity);
             if (timeSinceLastActivity < CONFIG.sessionTimeout) {
                 sessionId = existingSession;
+                // Milestone 4 MVP: Load CRM attribution data if available
+                loadCRMAttributionData();
                 return;
             }
         }
@@ -94,6 +143,9 @@
         localStorage.setItem('rm_session', sessionId);
         updateLastActivity();
 
+        // Milestone 4 MVP: Initialize processing status check
+        checkProcessingStatus();
+
         // Send session start event
         trackEvent('session_start', null, {
             referrer: document.referrer,
@@ -101,7 +153,11 @@
             screen_resolution: `${screen.width}x${screen.height}`,
             viewport_size: `${window.innerWidth}x${window.innerHeight}`,
             timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            language: navigator.language
+            language: navigator.language,
+            // Milestone 4 MVP: Enhanced session metadata
+            sdk_version: '1.1.0',
+            enhanced_processing: CONFIG.useEnhancedProcessing,
+            auto_post_conversions: CONFIG.autoPostConversions
         });
     }
 
@@ -110,13 +166,44 @@
         localStorage.setItem('rm_last_activity', lastActivity.toString());
     }
 
+    // Milestone 4 MVP: CRM Attribution Integration
+    function loadCRMAttributionData() {
+        if (!userId) return;
+        
+        fetch(`${CONFIG.apiEndpoint}/users/${userId}/crm-attribution`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.crm_attribution && data.crm_attribution.crm_match) {
+                    crmAttributionData = data.crm_attribution;
+                    localStorage.setItem('rm_crm_attribution', JSON.stringify(crmAttributionData));
+                }
+            })
+            .catch(error => {
+                console.warn('Revenue Magick: Failed to load CRM attribution data', error);
+            });
+    }
+
+    // Milestone 4 MVP: Processing Status Check
+    function checkProcessingStatus() {
+        fetch(`${CONFIG.apiEndpoint}/processing/status`)
+            .then(response => response.json())
+            .then(data => {
+                processingStatus = data.status;
+                console.log('Revenue Magick: Processing pipeline status:', data.status);
+            })
+            .catch(error => {
+                console.warn('Revenue Magick: Failed to check processing status', error);
+                processingStatus = 'unknown';
+            });
+    }
+
     // Event tracking
     function trackEvent(eventType, elementId, metadata = {}) {
         if (!isInitialized) return;
 
         updateLastActivity();
 
-        const event = {
+        let event = {
             user_id: userId,
             session_id: sessionId,
             event_type: eventType,
@@ -129,12 +216,72 @@
             }
         };
 
+        // Milestone 4 MVP: Add CRM attribution data if available
+        if (crmAttributionData) {
+            event.metadata.crm_attribution = crmAttributionData;
+        }
+
+        // Milestone 4 MVP: Sanitize event data if enabled
+        if (CONFIG.sanitizePII) {
+            event = sanitizeEventData(event);
+        }
+
         eventQueue.push(event);
 
         // Flush immediately for critical events
         const criticalEvents = ['conversion', 'form_submit', 'cta_click'];
         if (criticalEvents.includes(eventType) || eventQueue.length >= CONFIG.batchSize) {
             flushEvents();
+        }
+    }
+
+    // Milestone 4 MVP: Enhanced event tracking with server-side posting
+    function trackConversionEvent(eventName, customData = {}) {
+        if (!isInitialized) return;
+
+        // Track the conversion event normally
+        trackEvent('conversion', null, {
+            conversion_event: eventName,
+            ...customData
+        });
+
+        // Milestone 4 MVP: Server-side posting if enabled
+        if (CONFIG.enableServerSidePosting) {
+            const eventData = {
+                event_name: eventName,
+                user_data: {
+                    email: customData.email,
+                    user_id: userId,
+                    client_ip_address: customData.ip_address,
+                    client_user_agent: navigator.userAgent
+                },
+                custom_data: {
+                    value: customData.value || 0,
+                    currency: customData.currency || 'USD',
+                    content_name: customData.content_name,
+                    ...customData
+                },
+                event_source_url: window.location.href
+            };
+
+            fetch(`${CONFIG.apiEndpoint}/events/server-side-post`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    ...eventData,
+                    platforms: CONFIG.platforms,
+                    test_mode: CONFIG.testMode
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                console.log('Revenue Magick: Server-side event posted:', data);
+            })
+            .catch(error => {
+                console.warn('Revenue Magick: Server-side posting failed:', error);
+            });
         }
     }
 
@@ -145,7 +292,53 @@
         const events = [...eventQueue];
         eventQueue = [];
 
-        sendEvents(events);
+        // Milestone 4 MVP: Use enhanced processing if enabled
+        if (CONFIG.useEnhancedProcessing) {
+            sendEnhancedEvents(events);
+        } else {
+            sendEvents(events);
+        }
+    }
+
+    // Milestone 4 MVP: Enhanced event sending
+    function sendEnhancedEvents(events, retryCount = 0) {
+        const requestData = {
+            events: events.map(event => ({
+                ...event,
+                auto_post_conversions: CONFIG.autoPostConversions,
+                sanitize_pii: CONFIG.sanitizePII
+            }))
+        };
+
+        fetch(`${CONFIG.apiEndpoint}/events/batch-enhanced`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Revenue Magick: Enhanced events processed:', data);
+        })
+        .catch(error => {
+            console.warn('Revenue Magick: Failed to send enhanced events', error);
+            
+            // Fallback to regular event sending
+            if (retryCount < CONFIG.maxRetries) {
+                setTimeout(() => {
+                    sendEvents(events, retryCount + 1);
+                }, CONFIG.retryDelay * Math.pow(2, retryCount));
+            } else {
+                // Add events back to queue for next flush
+                eventQueue.unshift(...events);
+            }
+        });
     }
 
     function sendEvents(events, retryCount = 0) {
@@ -585,6 +778,8 @@
         identify: function(newUserId) {
             userId = newUserId;
             localStorage.setItem('rm_user_id', userId);
+            // Milestone 4 MVP: Load CRM attribution data for new user
+            loadCRMAttributionData();
         },
         flush: flushEvents,
         getSession: function() {
@@ -592,7 +787,101 @@
                 userId: userId,
                 sessionId: sessionId,
                 scrollDepth: maxScrollDepth,
-                timeOnPage: Date.now() - pageStartTime
+                timeOnPage: Date.now() - pageStartTime,
+                // Milestone 4 MVP: Enhanced session data
+                crmAttribution: crmAttributionData,
+                processingStatus: processingStatus,
+                enhancedProcessing: CONFIG.useEnhancedProcessing
+            };
+        },
+        
+        // Milestone 4 MVP: Enhanced tracking methods
+        trackConversion: trackConversionEvent,
+        
+        // Milestone 4 MVP: Configuration management
+        configure: function(newConfig) {
+            Object.assign(CONFIG, newConfig);
+            console.log('Revenue Magick: Configuration updated', CONFIG);
+        },
+        
+        // Milestone 4 MVP: Data sanitization testing
+        testSanitization: function(testData) {
+            return sanitizeEventData(testData);
+        },
+        
+        // Milestone 4 MVP: CRM attribution management
+        getCRMAttribution: function() {
+            return crmAttributionData;
+        },
+        
+        refreshCRMAttribution: function() {
+            loadCRMAttributionData();
+        },
+        
+        // Milestone 4 MVP: Processing status
+        getProcessingStatus: function() {
+            return {
+                status: processingStatus,
+                lastChecked: Date.now(),
+                enhancedProcessing: CONFIG.useEnhancedProcessing,
+                autoPostConversions: CONFIG.autoPostConversions,
+                sanitizePII: CONFIG.sanitizePII
+            };
+        },
+        
+        refreshProcessingStatus: function() {
+            checkProcessingStatus();
+        },
+        
+        // Milestone 4 MVP: Server-side posting control
+        enableServerSidePosting: function(platforms = ['facebook', 'google'], testMode = false) {
+            CONFIG.enableServerSidePosting = true;
+            CONFIG.platforms = platforms;
+            CONFIG.testMode = testMode;
+            console.log('Revenue Magick: Server-side posting enabled', { platforms, testMode });
+        },
+        
+        disableServerSidePosting: function() {
+            CONFIG.enableServerSidePosting = false;
+            console.log('Revenue Magick: Server-side posting disabled');
+        },
+        
+        // Milestone 4 MVP: Enhanced event queue management
+        getEventQueue: function() {
+            return {
+                queueLength: eventQueue.length,
+                events: eventQueue.slice(), // Return copy
+                lastFlush: flushTimer ? 'active' : 'inactive'
+            };
+        },
+        
+        clearEventQueue: function() {
+            eventQueue = [];
+            console.log('Revenue Magick: Event queue cleared');
+        },
+        
+        // Milestone 4 MVP: Debug and monitoring
+        getDebugInfo: function() {
+            return {
+                version: '1.1.0',
+                initialized: isInitialized,
+                userId: userId,
+                sessionId: sessionId,
+                config: { ...CONFIG },
+                stats: {
+                    scrollDepth: maxScrollDepth,
+                    timeOnPage: Date.now() - pageStartTime,
+                    hesitationLoops: hesitationLoops,
+                    backButtonClicks: backButtonClicks,
+                    eventQueueLength: eventQueue.length
+                },
+                milestone4Features: {
+                    enhancedProcessing: CONFIG.useEnhancedProcessing,
+                    datasanitization: CONFIG.sanitizePII,
+                    crmIntegration: !!crmAttributionData,
+                    serverSidePosting: CONFIG.enableServerSidePosting,
+                    processingStatus: processingStatus
+                }
             };
         }
     };
@@ -601,7 +890,14 @@
     const script = document.querySelector('script[data-rm-auto-init]');
     if (script) {
         const autoConfig = {
-            apiEndpoint: script.dataset.rmApiEndpoint || CONFIG.apiEndpoint
+            apiEndpoint: script.dataset.rmApiEndpoint || CONFIG.apiEndpoint,
+            // Milestone 4 MVP: Enhanced auto-init configuration
+            useEnhancedProcessing: script.dataset.rmEnhancedProcessing !== 'false',
+            autoPostConversions: script.dataset.rmAutoPostConversions !== 'false',
+            sanitizePII: script.dataset.rmSanitizePii !== 'false',
+            enableServerSidePosting: script.dataset.rmServerSidePosting === 'true',
+            platforms: script.dataset.rmPlatforms ? script.dataset.rmPlatforms.split(',') : ['facebook', 'google'],
+            testMode: script.dataset.rmTestMode === 'true'
         };
         init(autoConfig);
     }

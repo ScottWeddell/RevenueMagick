@@ -1,9 +1,22 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Key, MapPin } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
+import { apiClient } from '../lib/api';
 
 interface GoHighLevelCredentials {
   apiKey: string;
   locationId: string;
+}
+
+interface GoHighLevelTestResult {
+  valid: boolean;
+  error?: string;
+}
+
+interface GoHighLevelSaveResult {
+  success: boolean;
+  integration_id?: string;
+  message?: string;
 }
 
 interface GoHighLevelCredentialsFormProps {
@@ -19,6 +32,8 @@ const GoHighLevelCredentialsForm: React.FC<GoHighLevelCredentialsFormProps> = ({
   onError,
   onClose
 }) => {
+  const { user } = useAuth();
+  const [userInfo, setUserInfo] = useState<any>(null);
   const [credentials, setCredentials] = useState<GoHighLevelCredentials>({
     apiKey: '',
     locationId: ''
@@ -26,6 +41,22 @@ const GoHighLevelCredentialsForm: React.FC<GoHighLevelCredentialsFormProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string>('');
+
+  // Fetch user info from backend
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (user) {
+        try {
+          const response = await apiClient.getCurrentUser();
+          setUserInfo(response.user);
+        } catch (error) {
+          console.error('Failed to fetch user info:', error);
+        }
+      }
+    };
+
+    fetchUserInfo();
+  }, [user]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,16 +70,6 @@ const GoHighLevelCredentialsForm: React.FC<GoHighLevelCredentialsFormProps> = ({
     setStatusMessage('');
 
     try {
-      // Check if user is properly authenticated
-      let authToken = localStorage.getItem('auth_token');
-      const currentUser = JSON.parse(localStorage.getItem('current_user') || '{}');
-
-      if (!authToken || !currentUser.id) {
-        throw new Error('Please log in to create integrations. No valid authentication found.');
-      }
-
-      console.log('Using authenticated token for user:', currentUser.id);
-
       setStatusMessage('Testing GoHighLevel credentials...');
       
       // Prepare credentials for testing
@@ -58,56 +79,21 @@ const GoHighLevelCredentialsForm: React.FC<GoHighLevelCredentialsFormProps> = ({
         integrationName: integrationName || 'GoHighLevel CRM'
       };
 
-      // Test the credentials
-      const response = await fetch('http://localhost:8000/api/v1/integrations/gohighlevel/test-credentials', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${authToken}`
-        },
-        body: JSON.stringify(testCredentials)
-      });
+      // Test the credentials using apiClient (which handles auth automatically)
+      const result: GoHighLevelTestResult = await apiClient.testGoHighLevelCredentials(testCredentials);
 
-      console.log('Response status:', response.status);
-      console.log('Response headers:', response.headers);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
-        console.error('Error response:', errorData);
-        
-        // Check for specific GoHighLevel API token migration error
-        if (errorData.detail && errorData.detail.includes('Switch to the new API token')) {
-          throw new Error('Your GoHighLevel API token needs to be updated. Please generate a new API token from your GoHighLevel settings and try again. GoHighLevel has migrated to a new token format.');
-        }
-        
-        throw new Error(errorData.detail || `HTTP ${response.status}: Failed to validate credentials`);
-      }
-
-      const result = await response.json();
+      console.log('Test result:', result);
       
       if (result.valid) {
         setStatusMessage('Saving integration...');
         
-        // Save the integration (this now includes comprehensive testing)
-        const saveResponse = await fetch('http://localhost:8000/api/v1/integrations/gohighlevel/save', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${authToken}`
-          },
-          body: JSON.stringify(testCredentials)
-        });
+        // Save the integration using apiClient
+        const saveResult: GoHighLevelSaveResult = await apiClient.saveGoHighLevelIntegration(testCredentials);
 
-        if (saveResponse.ok) {
-          const saveResult = await saveResponse.json();
-          setStatusMessage('Integration saved successfully!');
-          
-          // Pass the comprehensive summary to parent
-          onSuccess(saveResult);
-        } else {
-          const saveError = await saveResponse.json();
-          throw new Error(saveError.detail || 'Failed to save integration');
-        }
+        setStatusMessage('Integration saved successfully!');
+        
+        // Pass the comprehensive summary to parent
+        onSuccess(saveResult);
       } else {
         throw new Error(result.error || 'Invalid credentials');
       }

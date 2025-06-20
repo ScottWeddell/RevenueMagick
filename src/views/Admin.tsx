@@ -19,6 +19,7 @@ import {
   Smartphone,
   Tablet
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 interface SessionData {
   id: string;
@@ -62,13 +63,17 @@ const Admin: React.FC = () => {
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'completed'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [timeRange, setTimeRange] = useState('24h');
 
-  // API client function
+  // API client function using Supabase auth
   const apiRequest = async <T,>(endpoint: string, options: RequestInit = {}): Promise<T> => {
-    const token = localStorage.getItem('auth_token');
+    // Get Supabase session token instead of localStorage auth_token
+    const { data: { session } } = await supabase.auth.getSession();
+    const token = session?.access_token;
+    
     const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'http://localhost:8000/api/v1';
     const url = `${API_BASE_URL}${endpoint}`;
     
